@@ -27,7 +27,7 @@ The **synthetic imagery generation pipeline** consists of the following key comp
 - **Model performance**: Training deep learning-based vessel detection models with synthetic data.  
 
 ### 4️⃣ **Maritime Anomaly Simulation**  
-- **Dark fleet behavior modeling**: Simulating AIS-spoofing and untracked vessel movement.  
+- **Dark fleet behavior modeling**: Simulating untracked vessel movement.  
 - **Adverse weather simulation**: Generating images with occlusion factors (clouds, fog, reflections).  
 
 ---
