@@ -6,8 +6,8 @@ from PIL import Image
 from tqdm import tqdm
 
 # Define base dataset path
-dataset_path = "C:/Users/20202016/Documents/Master/Master's Thesis/Datasets/MasatiV2/"
-output_path = os.path.join(dataset_path, "MasatiV2Boats/")
+dataset_path = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/MasatiV2/"
+output_path = os.path.join(dataset_path, "MasatiV2Boats2/")
 
 # Create output directory if it doesn't exist
 os.makedirs(output_path, exist_ok=True)
@@ -54,12 +54,13 @@ def extract_boats(image_path, xml_path, image_filename, xml_filename, target_siz
         if boat_crop.size == 0:
             continue
 
-        # Resize to 64x64
-        boat_crop_resized = cv2.resize(boat_crop, (32, 32), interpolation=cv2.INTER_LANCZOS4)
+        if target_size is not None:
+            # Resize to target_size
+            boat_crop = cv2.resize(boat_crop, target_size, interpolation=cv2.INTER_LANCZOS4)
 
         # Save cropped and resized boat image
         boat_filename = f"{os.path.splitext(image_filename)[0]}_boat{boat_count}.png"
-        cv2.imwrite(os.path.join(output_path, boat_filename), boat_crop_resized)
+        cv2.imwrite(os.path.join(output_path, boat_filename), boat_crop)
         boat_count += 1
 
 
@@ -80,7 +81,7 @@ for label_folder in label_folders:
         if filename.endswith(".xml"):
             image_file = os.path.splitext(filename)[0] + ".png"
             if os.path.exists(os.path.join(image_folder_path, image_file)):
-                extract_boats(image_folder_path, xml_folder_path, image_file, filename, target_size=(32, 32))
+                extract_boats(image_folder_path, xml_folder_path, image_file, filename, target_size=None)
 
 print("Boat extraction complete!")
 
