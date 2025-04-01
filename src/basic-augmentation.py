@@ -1,10 +1,8 @@
 import os
 import io
-from zipfile import sizeEndCentDir
-
 import numpy as np
 import json
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import albumentations as A
 import xml.etree.ElementTree as ET
 from PIL import Image
@@ -126,23 +124,23 @@ class BasicAugmentation:
         valid_extensions = {'.jpg', '.jpeg', '.png', '.bmp'}
 
         # Iterate over the image folder to load and process the images
-        print(f"Loading images from {self.img_dir}...")
-        for filename in tqdm(os.listdir(self.img_dir)):
-            if os.path.splitext(filename)[1].lower() in valid_extensions:
-                image_path = os.path.join(self.img_dir, filename)
-                try:
-                    img = self.preprocess(image_path)
-                    self.images.append(img)
-                except Exception as e:
-                    print(f"Error loading {filename}: {str(e)}")
+        print(f"Loading images and annotations from {self.img_dir}...")
+        for file in tqdm(os.listdir(self.img_dir)):
+            if os.path.splitext(file)[1].lower() in valid_extensions:
+                image_path = os.path.join(self.img_dir, file)
+                img = self.preprocess(image_path)
+                self.images.append(img)
 
-        # Iterate over the xml folder to load and process the annotations
-        print(f"Loading annotations from {self.xml_dir}...")
-        for file in tqdm(os.listdir(self.xml_dir)):
-            if file.endswith('.xml'):
-                xml_file = os.path.join(self.xml_dir, file)
-                boxes, class_labels = self.parse_voc_xml(xml_file)
-                self.annotations[os.path.splitext(file)[0]] = (boxes, class_labels)
+                xml_file = os.path.splitext(file)[0] + ".xml"
+                xml_path = os.path.join(self.xml_dir, xml_file)
+
+                # Save the annotations for images with objects
+                if os.path.exists(xml_path):
+                    boxes, class_labels = self.parse_voc_xml(xml_path)
+                    self.annotations[os.path.splitext(file)[0]] = (boxes, class_labels)
+
+                else:
+                    self.annotations[os.path.splitext(file)[0]] = ([], [])
 
         return self.images, self.annotations
 
@@ -152,8 +150,6 @@ class BasicAugmentation:
 
         Args:
             xml_path (str): Path to XML annotation file
-            original_width (int): Original image width
-            original_height (int): Original image height
 
         Returns:
             tuple: (list of scaled bounding boxes, list of class labels)
@@ -214,11 +210,12 @@ class BasicAugmentation:
         image_path = os.path.join(images_dir, image_filename)
         image.save(image_path)
 
-        # Save annotation as JSON
-        annotation_data = {"boxes": boxes, "classes": classes}
-        annotation_path = os.path.join(annotations_dir, annotation_filename)
-        with open(annotation_path, "w") as f:
-            json.dump(annotation_data, f)
+        if boxes:
+            # Save annotation as JSON
+            annotation_data = {"boxes": boxes, "classes": classes}
+            annotation_path = os.path.join(annotations_dir, annotation_filename)
+            with open(annotation_path, "w") as f:
+                json.dump(annotation_data, f)
 
 
     def augment(self):
@@ -243,7 +240,7 @@ class BasicAugmentation:
         print(f"Start augmentation for {len(self.images)} images...")
 
         # Convert PIL images to numpy arrays
-        for (filename, image) in tqdm(zip(self.annotations.keys(), self.images)):
+        for (filename, image) in tqdm(zip(self.annotations.keys(), self.images), total=len(self.images)):
             image_np = np.array(image)
 
             # Retrieve bounding boxes and class labels using the filename
@@ -266,9 +263,9 @@ class BasicAugmentation:
 
 
 # Define the directories here:
-img_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/masati-thesis2/images"
-xml_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/masati-thesis2/annotations"
-output_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/masati-thesis2/"
+img_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/masati-thesis/images"
+xml_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/masati-thesis/annotations"
+output_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/masati-thesis/"
 
 # Create a BasicAugmentation instance
 augmenter = BasicAugmentation(
