@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 # Define base dataset path
 dataset_path = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/MasatiV2/"
-output_path = os.path.join(dataset_path, "MasatiV2Boats2/")
+output_path = os.path.join(dataset_path, "MasatiV2Boats/")
 
 # Create output directory if it doesn't exist
 os.makedirs(output_path, exist_ok=True)
