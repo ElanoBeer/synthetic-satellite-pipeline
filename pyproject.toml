@@ -1,0 +1,17 @@
+[project]
+name = "synthetic-satellite-pipeline"
+version = "0.1.0"
+description = "Repository for my Master thesis"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+    "albumentations>=2.0.5",
+    "empatches>=0.2.3",
+    "matplotlib>=3.10.1",
+    "numpy>=2.2.4",
+    "opencv-python>=4.11.0.86",
+    "pillow>=11.1.0",
+    "scikit-image>=0.25.2",
+    "torch>=2.6.0",
+    "tqdm>=4.67.1",
+]
