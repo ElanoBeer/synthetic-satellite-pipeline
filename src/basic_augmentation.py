@@ -1,12 +1,4 @@
-import os
-import io
-import numpy as np
-import json
-#import matplotlib.pyplot as plt
-import albumentations as A
-import xml.etree.ElementTree as ET
-from PIL import Image
-from tqdm import tqdm
+from object_insertion import *
 
 
 class BasicAugmentation:
