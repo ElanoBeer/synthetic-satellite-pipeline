@@ -1,12 +1,9 @@
 import os
-import io
-import json
 import random
 import xml.etree.ElementTree as ET
-import albumentations as A
 import cv2
 import numpy as np
-from PIL import Image
+import matplotlib.pyplot as plt
 from skimage import metrics
 from tqdm import tqdm
 
@@ -35,8 +32,9 @@ class ObjectInsertion:
         self.sample_method = sample_method
 
         # Initialize variables to store data
+        self.obj_size = tuple()
         self.objects = dict()
-        self.images = list()
+        self.images = dict()
         self.annotations = dict()
         self.masks = list()
 
@@ -103,7 +101,7 @@ class ObjectInsertion:
         Load all images from a directory and preprocess them.
 
         Args:
-            img_dir (str): Path to the directory containing images
+            self: Class information
 
         Returns:
             images: List of image preprocessed images
@@ -119,7 +117,7 @@ class ObjectInsertion:
             if os.path.splitext(file)[1].lower() in valid_extensions:
                 image_path = os.path.join(self.img_dir, file)
                 img = self.preprocess(image_path)
-                self.images.append(img)
+                self.images[file] = img
 
                 xml_file = os.path.splitext(file)[0] + ".xml"
                 xml_path = os.path.join(self.xml_dir, xml_file)
@@ -127,10 +125,11 @@ class ObjectInsertion:
                 # Save the annotations for images with objects
                 if os.path.exists(xml_path):
                     boxes, class_labels = self.parse_voc_xml(xml_path)
-                    self.annotations[os.path.splitext(file)[0]] = (boxes, class_labels)
+                    self.annotations[file] = boxes
 
                 else:
-                    self.annotations[os.path.splitext(file)[0]] = ([], [])
+                    #self.annotations[file] = ([], [])
+                    continue
 
         return self.images, self.annotations
 
@@ -195,40 +194,38 @@ class ObjectInsertion:
         # Iterate over the image folder to load and process the images
         print(f"Loading images and annotations from {self.obj_dir}...")
         for file in tqdm(os.listdir(self.obj_dir)):
-            obj = self.preprocess(file)
+            #obj = self.preprocess(os.path.join(self.obj_dir, file), self.obj_size)
+            # Load image using OpenCV
+            img = cv2.imread(os.path.join(self.obj_dir, file), cv2.IMREAD_COLOR)
+
+            # Convert BGR to RGB
+            obj = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             self.objects[file] = obj
 
         return self.objects
 
-    def locate_anchor(self, obj_shape, dst_bbox):
+    def locate_anchor(self, dst_bbox):
         """
         Generates a new bounding box that is close to but does not overlap with the given bounding box.
         The new bounding box may have a different size.
 
         Args:
-            src_bbox (list): [x_min, y_min, x_max, y_max] representing the original bounding box.
-            min_distance (int): Minimum distance to move the new bounding box away.
-            max_distance (int): Maximum distance to move the new bounding box away.
-            size_variation (float): Maximum percentage by which the new box size can vary (e.g., 0.5 = ±50%).
+            dst_bbox (list): [x_min, y_min, x_max, y_max] representing the original bounding box.
 
         Returns:
             list: [x_min, y_min, x_max, y_max] for the new non-overlapping bounding box.
         """
 
         # Initialize minimum and maximum distance to move the new bounding box
-        min_distance = 0.1 * self.target_size[0]
-        max_distance = 0.5 * self.target_size[0]
-
-        # Calculate scaling factors
-        scale_x = self.target_size[0] / self.input_size[0]
-        scale_y = self.target_size[1] / self.input_size[1]
+        min_distance = 0.2 * self.obj_size[0]
+        max_distance = 0.5 * self.obj_size[0]
 
         # Extract destination bounding box information
         x_min, y_min, x_max, y_max = dst_bbox
         center_x = (x_min + x_max) / 2
         center_y = (y_min + y_max) / 2
-        width = self.target_size[0]
-        height = self.target_size[1]
+        width = x_max - x_min
+        height = y_max - y_min
 
         for i in range(self.max_iter):
             # Compute diagonal distances (to ensure proper separation)
@@ -241,28 +238,90 @@ class ObjectInsertion:
             min_safe_distance = orig_diag + min_distance
             max_safe_distance = orig_diag + max_distance
             distance = random.uniform(min_safe_distance, max_safe_distance)
-            # print(min_safe_distance, max_safe_distance, distance)
 
-            # Compute new center position using polar coordinates
-            new_center_x = (center_x + distance * np.cos(angle)) * scale_x
-            new_center_y = (center_y + distance * np.sin(angle)) * scale_y
-            # print(new_center_x, new_center_y)
+            # Then apply distance shift in target space
+            new_center_x = center_x + distance * np.cos(angle)
+            new_center_y = center_y + distance * np.sin(angle)
 
             # Compute new bounding box coordinates
-            new_x_min = int(new_center_x - obj_shape[0] / 2)
-            new_y_min = int(new_center_y - obj_shape[1] / 2)
-            new_x_max = int(new_center_x + obj_shape[0] / 2)
-            new_y_max = int(new_center_y + obj_shape[1] / 2)
+            new_x_min = int(new_center_x - self.obj_size[0] / 2)
+            new_y_min = int(new_center_y - self.obj_size[1] / 2)
+            new_x_max = int(new_center_x + self.obj_size[0] / 2)
+            new_y_max = int(new_center_y + self.obj_size[1] / 2)
 
             new_bbox = [new_x_min, new_y_min, new_x_max, new_y_max]
 
-            if min(new_bbox) > self.margin & max(new_bbox) < (self.target_size[0] - self.margin):
+            if min(new_bbox) > self.margin and max(new_bbox) < (self.target_size[0] - self.margin):
                 final_bbox = new_bbox
                 return final_bbox
 
         return None
 
-    def create_masks(self):
+    def find_bbox(self, anchor_bbox, existing_bboxes):
+        """
+        Tries to find a non-overlapping, valid anchor bounding box near `anchor_bbox`.
+        Returns the new bbox if found, else None.
+        """
+        for _ in range(self.max_iter):
+            new_bbox = self.locate_anchor(anchor_bbox)
+
+            if new_bbox is None:
+                print("Failed to find valid anchor — skipping to next bounding box.")
+                return None
+
+            if not self.check_overlap(existing_bboxes, new_bbox):
+                return new_bbox
+
+            print("Overlap detected — trying again...")
+
+        # All attempts failed
+        return None
+
+    def select_candidate_object(self, target_bbox, exclude_key=None):
+        """
+        Selects an object from the pool that has a similar max dimension (width/height)
+        to the target bounding box. Excludes a given object key (optional) and allows random sampling.
+
+        Args:
+            target_bbox (list): [x_min, y_min, x_max, y_max]
+            exclude_key (str, optional): Key of the object to avoid selecting.
+
+        Returns:
+            (str, np.array): Tuple of selected key and object image array.
+        """
+        target_width = target_bbox[2] - target_bbox[0]
+        target_height = target_bbox[3] - target_bbox[1]
+        target_max_dim = max(target_width, target_height)
+
+        # Filter objects that have a similar max dimension
+        matching_objects = []
+        for key, obj in self.objects.items():
+            if key == exclude_key:
+                continue  # Skip the object to exclude
+
+            obj_h, obj_w = obj.shape[:2]
+            obj_max_dim = max(obj_w, obj_h)
+
+            # If the object's max dimension matches the target max dimension
+            if obj_max_dim == target_max_dim:
+                matching_objects.append(obj)
+
+        # If no matching object is found
+        if not matching_objects:
+            obj = np.random.choice(list(self.objects.keys()), replace=False)
+            return self.objects[obj]
+
+        # Randomly select an object from the matching set
+        if self.sample_method == "without":
+            # Without replacement: Randomly sample one object from the matching set without repeating
+            selected_obj = matching_objects[np.random.choice(len(matching_objects), replace=False)]
+        else:
+            # With replacement: You can pick the same object multiple times
+            selected_obj = matching_objects[np.random.choice(len(matching_objects))]
+
+        return selected_obj
+
+    def create_mask(self, box):
         """
             Create a binary mask from bounding boxes found in the XML file,
             adjusting for resized coordinates.
@@ -271,30 +330,48 @@ class ObjectInsertion:
                 np.ndarray: Binary mask with bounding box areas marked.
         """
 
-        # Initiate a list of masks
-        masks = list()
+        # Initialize
+        mask = np.zeros(self.obj_size, dtype=np.uint8)
 
-        # Extract the bounding boxes
-        boxes = next(iter(self.annotations.values()))
+        # Extract coordinates from the bounding box
+        xmin, ymin, xmax, ymax = map(int, box)
 
-        print(boxes)
-        # Loop through each bounding box
-        for box in boxes[0]:
-            # Initialize the mask with zeros
-            mask = np.zeros(self.target_size, dtype=np.uint8)
+        # Fill the corresponding area in the mask with 255 (white)
+        mask[ymin:ymax, xmin:xmax] = 255
 
-            # Extract coordinates from the bounding box
-            xmin, ymin, xmax, ymax = map(int, box)
+        # Soften the edges of the mask
+        mask = cv2.GaussianBlur(mask, (5, 5), 0)
+        return mask
 
-            # Fill the corresponding area in the mask with 255 (white)
-            mask[ymin:ymax, xmin:xmax] = 255
+    def plot_elements(self, obj, old_img, clone, center=None):
+        """
+        Visualizes the object, background, mask, and clone side by side using subplots.
 
-            # Soften the edges of the mask
-            mask = cv2.GaussianBlur(mask, (5, 5), 0)
+        Args:
+            obj (np.array): The object image to insert.
+            old_img (np.array): The background image.
+            clone (np.array): The result of the seamlessClone operation.
+            center (tuple, optional): Center of the inserted object, printed for reference.
+        """
+        fig, axes = plt.subplots(1, 3, figsize=(20, 5))
 
-            # Add to the list of masks
-            masks.append(mask)
-        return masks
+        # Object Image
+        axes[0].imshow(obj)
+        axes[0].set_title("Object Image")
+        axes[0].axis('off')
+
+        # Background Image
+        axes[1].imshow(old_img)
+        axes[1].set_title("Background Image")
+        axes[1].axis('off')
+
+        # Clone
+        axes[2].imshow(clone)
+        axes[2].set_title("Clone Result")
+        axes[2].axis('off')
+
+        plt.tight_layout()
+        plt.show()
 
     def check_overlap(self, tabu_lst, candidate):
         """
@@ -307,6 +384,11 @@ class ObjectInsertion:
         Returns:
             bool: True if the candidate overlaps with any box in the tabu list, False otherwise.
         """
+
+        # Skip the check when the tabu_list is empty
+        if not tabu_lst:
+            return False
+
         # Convert both tabu_lst and candidate into NumPy arrays
         tabu_arr = np.array(tabu_lst)
         candidate_arr = np.array(candidate)
@@ -323,7 +405,15 @@ class ObjectInsertion:
 
     def check_insertion(self, image1, image2):
         """
+        Compare two images using Structural Similarity Index (SSIM) to assess
+        whether an object has been successfully inserted.
 
+        Args:
+            image1 (numpy.ndarray): The original image before insertion.
+            image2 (numpy.ndarray): The modified image after insertion.
+
+        Returns:
+            float: The SSIM score (ranges from -1 to 1, where 1 means identical images).
         """
         # Convert images to grayscale
         image1_gray = cv2.cvtColor(image1, cv2.COLOR_BGR2GRAY)
@@ -331,13 +421,13 @@ class ObjectInsertion:
 
         # Calculate SSIM
         ssim_score = metrics.structural_similarity(image1_gray, image2_gray)
-        print(f"SSIM Score: ", round(ssim_score, 2))
+        print(f"SSIM Score: ", round(ssim_score, 3))
         return ssim_score
 
     def object_insertion(self):
         """
-
-
+        The main function in the object insertion class. It uses the other functions to perform guided object insertion.
+        It automatically saves the images to the provided output directory.
         """
         # Load the background images and annotations from the directories
         self.load_images()
@@ -345,75 +435,88 @@ class ObjectInsertion:
         # Load the objects
         self.load_objects()
 
-        # Create masks for the object images
-        self.create_masks()
-
         # Start performing the object insertion
         print(f"Start insertion objects for {len(self.images)} images...")
-        score_lst = list()
-        count = 0
+        score_dct = dict()
+        saves = 0
+        fails = 0
 
         # Iterate of the background images
         for img in tqdm(self.annotations.keys()):
             dst_bbox = self.annotations[img]
+            print(img, dst_bbox)
 
             # Create a list to store the new bounding boxes
             new_bbox_lst = list()
+
+            # Store the old image for comparison
+            old_img = self.images[img]
 
             # Some images have multiple bounding boxes
             print(f"Calculating new bounding box for {len(dst_bbox)} images...")
             for bbox in dst_bbox:
 
-                # Sample a random object from the set
-                if self.sample_method == "without":
+                # Sample an object from the set
+                if self.sample_method == "random":
                     # Without replacement
-                    obj = np.random.sample(self.objects[img])
-
+                    obj = np.random.choice(list(self.objects.keys()), replace=False)
+                    obj = self.objects[obj]
                 else:
-                    # With replacement
-                    obj = np.random.choice(self.objects[img])
+                    obj = self.select_candidate_object(bbox)
 
-                # Store the object image size
-                obj_shape = obj.shape[:2]
+                # Store the shape of the object image
+                print(obj.shape)
+                self.obj_size = obj.shape
 
                 print(f"Finding new bounding box...")
                 # Calculate a new bbox for insertion
-                for i in range(self.max_iter):
-                    # Search for a candidate solution
-                    new_bbox = self.locate_anchor(obj_shape, bbox)
-                    if not self.check_overlap(new_bbox, new_bbox_lst):
-                        new_bbox_lst.append(new_bbox)
-                        break
-                    else:
-                        continue
+                new_bbox = self.find_bbox(bbox, new_bbox_lst)
+
+                # Skip to next bbox if we find a no valid one
+                if new_bbox is None:
+                    continue
+
+                # Add the bounding box to the list
+                new_bbox_lst.append(new_bbox)
 
                 # Calculate the center of the candidate bounding box
-                center = ((new_bbox[0] + new_bbox[2]) / 2), ((new_bbox[1] + new_bbox[3]) / 2)
+                center = int((new_bbox[0] + new_bbox[2]) / 2), int((new_bbox[1] + new_bbox[3]) / 2)
 
-                # Store the old image for comparison
-                old_img = img
+                # Initialize a binary mask with for the object
+                mask = np.zeros(obj.shape, dtype=np.uint8)
+                mask.fill(255)
 
                 # Iteratively create a normal clone of the image with an inserted object
-                img = cv2.seamlessClone(
-                    obj, img, new_bbox, center,
+                clone = cv2.seamlessClone(
+                    obj, old_img, mask, center,
                     flags=cv2.NORMAL_CLONE,
                 )
 
                 # Check if the new image has an additional object
-                ssim_score = self.check_insertion(img, old_img)
-                score_lst.append([ssim_score, img])
-                print(f"Clone score: {ssim_score}")
+                ssim_score = self.check_insertion(old_img, clone)
+                score_dct[img] = ssim_score
+                if ssim_score == 1.0:
+                    print(f"Object likely did not insert.")
+                    fails += 1
+
+                # Display the images and mask
+                print("Displaying the object, image, and clone...")
+                self.plot_elements(obj, old_img, clone, center)
+
+                # Overwrite the current image with the clone
+                old_img = clone
 
                 # Save object inserted images to directory
-                self.save_data(img, f"{img}_{count}")
-                count += 1
+                #self.save_data(img, f"{img}_{count}")
+                saves += 1
 
 
 # Define the directories here:
-img_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/masati-thesis/images"
-obj_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/MasatiV2/MasatiV2Boats"
-xml_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/masati-thesis/annotations"
-output_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/masati-thesis/"
+root_dir = "E:/Datasets/"
+img_dir = root_dir + "masati-thesis/images"
+obj_dir = root_dir + "MasatiV2/MasatiV2Boats"
+xml_dir = root_dir + "masati-thesis/annotations"
+output_dir = root_dir + "masati-thesis/"
 
 # Create a ObjectInsertion instance
 augmenter = ObjectInsertion(
@@ -425,7 +528,7 @@ augmenter = ObjectInsertion(
     target_size=(224, 224),
     margin=20,
     max_iter=100,
-    sample_method="without"
+    sample_method="selective"
 )
 augmenter.object_insertion()
 
