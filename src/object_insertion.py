@@ -199,7 +199,10 @@ class ObjectInsertion:
 
             # Convert BGR to RGB
             obj = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-            self.objects[file] = obj
+
+            # Increase size of the objects by 1.5
+            resized = cv2.resize(obj, (int(obj.shape[0] * 1.5), int(obj.shape[1] * 1.5)) , interpolation=cv2.INTER_LANCZOS4)
+            self.objects[file] = resized
 
         return self
 
@@ -342,13 +345,13 @@ class ObjectInsertion:
             final_mask = cv2.morphologyEx(clean_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
 
             # Apply Gaussian blur to reduce the noise
-            blur_mask = cv2.GaussianBlur(final_mask, (3, 3), 0)
+            blur_mask = cv2.GaussianBlur(final_mask, (5, 5), 0)
             self.masks[file] = blur_mask
 
         return self
 
     @staticmethod
-    def plot_elements(obj, mask, old_img, clone):
+    def plot_elements(obj, mask, old_img, clone, center = None):
         """
         Visualizes the object, background, mask, and clone side by side using subplots.
 
@@ -366,7 +369,7 @@ class ObjectInsertion:
         axes[0].axis('off')
 
         # Mask
-        axes[1].imshow(mask)
+        axes[1].imshow(mask, cmap="gray")
         axes[1].set_title("Mask Result")
         axes[1].axis('off')
 
@@ -379,6 +382,7 @@ class ObjectInsertion:
         axes[3].imshow(clone)
         axes[3].set_title("Clone Result")
         axes[3].axis('off')
+        axes[3].scatter(center[0], center[1], color='red', s=10, marker='x')
 
         plt.tight_layout()
         plt.show()
@@ -513,7 +517,7 @@ class ObjectInsertion:
 
                 # Display the images and mask
                 print("Displaying the object, mask, image, and clone...")
-                self.plot_elements(obj, mask, old_img, clone)
+                self.plot_elements(obj, mask, old_img, clone, center)
 
                 # Overwrite the current image with the clone
                 old_img = clone
