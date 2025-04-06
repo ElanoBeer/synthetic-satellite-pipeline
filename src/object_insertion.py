@@ -36,7 +36,7 @@ class ObjectInsertion:
         self.objects = dict()
         self.images = dict()
         self.annotations = dict()
-        self.masks = list()
+        self.masks = dict()
 
 
     def preprocess(self, img_path):
@@ -131,7 +131,7 @@ class ObjectInsertion:
                     #self.annotations[file] = ([], [])
                     continue
 
-        return self.images, self.annotations
+        return self
 
     # def save_data(self, image, boxes, classes, image_id, image_dir_name, annot_dir_name):
     #     """
@@ -194,7 +194,6 @@ class ObjectInsertion:
         # Iterate over the image folder to load and process the images
         print(f"Loading images and annotations from {self.obj_dir}...")
         for file in tqdm(os.listdir(self.obj_dir)):
-            #obj = self.preprocess(os.path.join(self.obj_dir, file), self.obj_size)
             # Load image using OpenCV
             img = cv2.imread(os.path.join(self.obj_dir, file), cv2.IMREAD_COLOR)
 
@@ -202,7 +201,7 @@ class ObjectInsertion:
             obj = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
             self.objects[file] = obj
 
-        return self.objects
+        return self
 
     def locate_anchor(self, dst_bbox):
         """
@@ -304,12 +303,12 @@ class ObjectInsertion:
 
             # If the object's max dimension matches the target max dimension
             if obj_max_dim == target_max_dim:
-                matching_objects.append(obj)
+                matching_objects.append(key)
 
         # If no matching object is found
         if not matching_objects:
-            obj = np.random.choice(list(self.objects.keys()), replace=False)
-            return self.objects[obj]
+            random_obj = np.random.choice(list(self.objects.keys()), replace=False)
+            return self.objects[random_obj], self.masks[random_obj]
 
         # Randomly select an object from the matching set
         if self.sample_method == "without":
@@ -319,31 +318,37 @@ class ObjectInsertion:
             # With replacement: You can pick the same object multiple times
             selected_obj = matching_objects[np.random.choice(len(matching_objects))]
 
-        return selected_obj
+        return self.objects[selected_obj], self.masks[selected_obj]
 
-    def create_mask(self, box):
+    def create_masks(self):
         """
-            Create a binary mask from bounding boxes found in the XML file,
-            adjusting for resized coordinates.
+        Quickly create a binary mask from an image using thresholding and morphology.
 
-            Returns:
-                np.ndarray: Binary mask with bounding box areas marked.
+        Args:
+            self: Use the self.objects to access the objects and store them in self.masks.
+
+        Returns:
+            mask (np.ndarray): Binary mask (uint8, values 0 or 255).
         """
+        for file, obj in self.objects.items():
+            gray_obj = cv2.cvtColor(obj, cv2.COLOR_BGR2GRAY)
 
-        # Initialize
-        mask = np.zeros(self.obj_size, dtype=np.uint8)
+            # Auto threshold using Otsu's method
+            _, binary_mask = cv2.threshold(gray_obj, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
-        # Extract coordinates from the bounding box
-        xmin, ymin, xmax, ymax = map(int, box)
+            # Morphological operations to clean the mask
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
+            clean_mask = cv2.morphologyEx(binary_mask, cv2.MORPH_OPEN, kernel, iterations=1)
+            final_mask = cv2.morphologyEx(clean_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
 
-        # Fill the corresponding area in the mask with 255 (white)
-        mask[ymin:ymax, xmin:xmax] = 255
+            # Apply Gaussian blur to reduce the noise
+            blur_mask = cv2.GaussianBlur(final_mask, (3, 3), 0)
+            self.masks[file] = blur_mask
 
-        # Soften the edges of the mask
-        mask = cv2.GaussianBlur(mask, (5, 5), 0)
-        return mask
+        return self
 
-    def plot_elements(self, obj, old_img, clone, center=None):
+    @staticmethod
+    def plot_elements(obj, mask, old_img, clone):
         """
         Visualizes the object, background, mask, and clone side by side using subplots.
 
@@ -353,27 +358,33 @@ class ObjectInsertion:
             clone (np.array): The result of the seamlessClone operation.
             center (tuple, optional): Center of the inserted object, printed for reference.
         """
-        fig, axes = plt.subplots(1, 3, figsize=(20, 5))
+        fig, axes = plt.subplots(1, 4, figsize=(20, 5))
 
         # Object Image
         axes[0].imshow(obj)
         axes[0].set_title("Object Image")
         axes[0].axis('off')
 
-        # Background Image
-        axes[1].imshow(old_img)
-        axes[1].set_title("Background Image")
+        # Mask
+        axes[1].imshow(mask)
+        axes[1].set_title("Mask Result")
         axes[1].axis('off')
 
-        # Clone
-        axes[2].imshow(clone)
-        axes[2].set_title("Clone Result")
+        # Background Image
+        axes[2].imshow(old_img)
+        axes[2].set_title("Background Image")
         axes[2].axis('off')
+
+        # Clone
+        axes[3].imshow(clone)
+        axes[3].set_title("Clone Result")
+        axes[3].axis('off')
 
         plt.tight_layout()
         plt.show()
 
-    def check_overlap(self, tabu_lst, candidate):
+    @staticmethod
+    def check_overlap(tabu_lst, candidate):
         """
         Checks if the candidate bounding box overlaps with any bounding box in the tabu list.
 
@@ -403,7 +414,8 @@ class ObjectInsertion:
         # Return True if any overlap is detected, else False
         return np.any(overlaps)
 
-    def check_insertion(self, image1, image2):
+    @staticmethod
+    def check_insertion(image1, image2):
         """
         Compare two images using Structural Similarity Index (SSIM) to assess
         whether an object has been successfully inserted.
@@ -435,6 +447,9 @@ class ObjectInsertion:
         # Load the objects
         self.load_objects()
 
+        # Create the object masks
+        self.create_masks()
+
         # Start performing the object insertion
         print(f"Start insertion objects for {len(self.images)} images...")
         score_dct = dict()
@@ -460,17 +475,18 @@ class ObjectInsertion:
                 if self.sample_method == "random":
                     # Without replacement
                     obj = np.random.choice(list(self.objects.keys()), replace=False)
+                    mask = self.masks[obj]
                     obj = self.objects[obj]
                 else:
-                    obj = self.select_candidate_object(bbox)
+                    obj, mask = self.select_candidate_object(bbox)
 
                 # Store the shape of the object image
-                print(obj.shape)
                 self.obj_size = obj.shape
 
                 print(f"Finding new bounding box...")
                 # Calculate a new bbox for insertion
                 new_bbox = self.find_bbox(bbox, new_bbox_lst)
+                print(bbox, new_bbox)
 
                 # Skip to next bbox if we find a no valid one
                 if new_bbox is None:
@@ -481,10 +497,6 @@ class ObjectInsertion:
 
                 # Calculate the center of the candidate bounding box
                 center = int((new_bbox[0] + new_bbox[2]) / 2), int((new_bbox[1] + new_bbox[3]) / 2)
-
-                # Initialize a binary mask with for the object
-                mask = np.zeros(obj.shape, dtype=np.uint8)
-                mask.fill(255)
 
                 # Iteratively create a normal clone of the image with an inserted object
                 clone = cv2.seamlessClone(
@@ -500,8 +512,8 @@ class ObjectInsertion:
                     fails += 1
 
                 # Display the images and mask
-                print("Displaying the object, image, and clone...")
-                self.plot_elements(obj, old_img, clone, center)
+                print("Displaying the object, mask, image, and clone...")
+                self.plot_elements(obj, mask, old_img, clone)
 
                 # Overwrite the current image with the clone
                 old_img = clone
@@ -528,7 +540,7 @@ augmenter = ObjectInsertion(
     target_size=(224, 224),
     margin=20,
     max_iter=100,
-    sample_method="selective"
+    sample_method="random"
 )
 augmenter.object_insertion()
 
