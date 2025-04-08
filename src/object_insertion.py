@@ -19,7 +19,8 @@ class ObjectInsertion:
                  margin=20,
                  max_iter=100,
                  max_insert=3,
-                 sample_method="without"):
+                 sample_method="selective",
+                 replacement=False):
 
 
         # Initialize input variables
@@ -33,6 +34,7 @@ class ObjectInsertion:
         self.max_iter = max_iter
         self.max_insert = max_insert
         self.sample_method = sample_method
+        self.replacement = replacement
 
         # Initialize variables to store data
         self.obj_size = tuple()
@@ -131,12 +133,11 @@ class ObjectInsertion:
                     self.annotations[file] = boxes
 
                 else:
-                    #self.annotations[file] = ([], [])
                     continue
 
         return self
 
-    def save_data(self, img, clone, boxes, img_id):
+    def save_data(self, img, clone, new_boxes, img_id):
         """
         Save the images to a new directory.
 
@@ -144,7 +145,7 @@ class ObjectInsertion:
             self: class information
             img(nd.array): Original image preprocessed image
             clone(nd.array): Object inserted clone of image
-            boxes: List of bounding boxes
+            new_boxes: List of bounding boxes
             img_id: Unique image ID representing the index
 
         Returns:
@@ -160,19 +161,22 @@ class ObjectInsertion:
         os.makedirs(annotations_dir, exist_ok=True)
 
         # Define file name
-        image_filename = img + "_" + f"{img_id}.png"
-        annotation_filename = img + "_" + f"{img_id}.json"
+        base, _ = os.path.splitext(img)
+        image_filename = base + "_" + f"{img_id}.png"
+        annotation_filename = base + "_" + f"{img_id}.json"
 
         # Save image
         image_path = os.path.join(images_dir, image_filename)
-        clone.save(image_path)
+        clone_rgb = cv2.cvtColor(clone, cv2.COLOR_BGR2RGB)
+        cv2.imwrite(image_path, clone_rgb)
 
-        if boxes:
-            # Save annotation as JSON
-            annotation_data = {"boxes": boxes}
-            annotation_path = os.path.join(annotations_dir, annotation_filename)
-            with open(annotation_path, "w") as f:
-                json.dump(annotation_data, f)
+        # Save annotation as JSON
+        boxes = self.annotations[img]
+        annotations = boxes + new_boxes
+        annotation_data = {"boxes": annotations}
+        annotation_path = os.path.join(annotations_dir, annotation_filename)
+        with open(annotation_path, "w") as f:
+            json.dump(annotation_data, f)
 
         return self
 
@@ -194,10 +198,8 @@ class ObjectInsertion:
             obj = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
             # Filter the objects based on quality
-            if obj.shape > (12, 12):
-                # Increase size of the objects by 1.5
-                resized = cv2.resize(obj, (int(obj.shape[0]), int(obj.shape[1])) , interpolation=cv2.INTER_LANCZOS4)
-                self.objects[file] = resized
+            resized = cv2.resize(obj, (int(obj.shape[0]), int(obj.shape[1])) , interpolation=cv2.INTER_LANCZOS4)
+            self.objects[file] = resized
 
         return self
 
@@ -293,14 +295,14 @@ class ObjectInsertion:
         # Filter objects that have a similar max dimension
         matching_objects = []
         for key, obj in self.objects.items():
-            if key == exclude_key:
-                continue  # Skip the object to exclude
+            # if key == exclude_key:
+            #     continue  # Skip the object to exclude
 
             obj_h, obj_w = obj.shape[:2]
             obj_max_dim = max(obj_w, obj_h)
 
             # If the object's max dimension matches the target max dimension
-            if obj_max_dim == target_max_dim:
+            if obj_max_dim == round(target_max_dim):
                 matching_objects.append(key)
 
         # If no matching object is found
@@ -309,12 +311,11 @@ class ObjectInsertion:
             return self.objects[random_obj], self.masks[random_obj]
 
         # Randomly select an object from the matching set
-        if self.sample_method == "without":
+        if not self.replacement:
             # Without replacement: Randomly sample one object from the matching set without repeating
             selected_obj = matching_objects[np.random.choice(len(matching_objects), replace=False)]
         else:
             # With replacement: You can pick the same object multiple times
-            print("HALLO")
             selected_obj = matching_objects[np.random.choice(len(matching_objects))]
 
         return self.objects[selected_obj], self.masks[selected_obj]
@@ -356,6 +357,7 @@ class ObjectInsertion:
 
         Args:
             obj (np.array): The object image to insert.
+            mask (np.array): Binary mask (uint8, values 0 or 255).
             old_img (np.array): The background image.
             clone (np.array): The result of the seamlessClone operation.
             center (tuple, optional): Center of the inserted object, printed for reference.
@@ -447,7 +449,7 @@ class ObjectInsertion:
 
         Args:
             src (H, W, 3): Source image containing the object.
-            dst (H', W', 3): Destination (background) image.
+            dst (H, W, 3): Destination (background) image.
             mask (H, W): Grayscale mask with object as white (255), background as black (0).
             center (x, y): Tuple indicating where the center of the object should go in dst.
 
@@ -523,14 +525,11 @@ class ObjectInsertion:
 
                 # Sample an object from the set
                 if self.sample_method == "random":
-                    # Without replacement
                     obj = np.random.choice(list(self.objects.keys()), replace=False)
                     mask = self.masks[obj]
                     obj = self.objects[obj]
                 else:
                     obj, mask = self.select_candidate_object(bbox)
-                    plt.imshow(mask, cmap="gray")
-                    plt.show()
 
                 # Store the shape of the object image
                 self.obj_size = obj.shape
@@ -560,9 +559,9 @@ class ObjectInsertion:
                     print(f"Object likely did not insert.")
                     fails += 1
 
-                # Display the images and mask
-                print("Displaying the object, mask, image, and clone...")
-                self.plot_elements(obj, mask, old_img, clone, center)
+                # # Display the images and mask
+                # print("Displaying the object, mask, image, and clone...")
+                # self.plot_elements(obj, mask, old_img, clone, center)
 
                 # Overwrite the current image with the clone
                 old_img = clone
@@ -572,10 +571,10 @@ class ObjectInsertion:
                 saves += 1
                 insert_count += 1
 
-                return saves, fails
+        return saves, fails, score_dct
 
 # Define the directories here:
-root_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/"
+root_dir = "E:/Datasets/"
 img_dir = root_dir + "masati-thesis/images"
 obj_dir = root_dir + "MasatiV2/MasatiV2Boats"
 xml_dir = root_dir + "masati-thesis/annotations"
@@ -592,9 +591,10 @@ augmenter = ObjectInsertion(
     margin=20,
     max_iter=100,
     max_insert=3,
-    sample_method="selective"
+    sample_method="selective",
+    replacement=True
 )
-saves, fails = augmenter.object_insertion()
+saves, fails, scores = augmenter.object_insertion()
 
 
 
