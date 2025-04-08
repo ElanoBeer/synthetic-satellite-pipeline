@@ -1,4 +1,5 @@
 import os
+import json
 import random
 import xml.etree.ElementTree as ET
 import cv2
@@ -17,6 +18,7 @@ class ObjectInsertion:
                  target_size=(224, 224),
                  margin=20,
                  max_iter=100,
+                 max_insert=3,
                  sample_method="without"):
 
 
@@ -29,6 +31,7 @@ class ObjectInsertion:
         self.target_size = target_size
         self.margin = margin
         self.max_iter = max_iter
+        self.max_insert = max_insert
         self.sample_method = sample_method
 
         # Initialize variables to store data
@@ -133,55 +136,45 @@ class ObjectInsertion:
 
         return self
 
-    # def save_data(self, image, boxes, classes, image_id, image_dir_name, annot_dir_name):
-    #     """
-    #     Save the images to a new directory.
-    #
-    #     Args:
-    #         self: class information
-    #         image: PIL.Image
-    #         boxes: List of bounding boxes
-    #         classes: List of class labels
-    #         image_id: Unique image ID representing the index
-    #
-    #     Returns:
-    #         None: directory
-    #     """
-    #
-    #     # Define subdirectories for images and annotations
-    #     images_dir = os.path.join(self.out_dir, image_dir_name)
-    #     annotations_dir = os.path.join(self.out_dir, annot_dir_name)
-    #
-    #     # Create directories if they do not exist
-    #     os.makedirs(images_dir, exist_ok=True)
-    #     os.makedirs(annotations_dir, exist_ok=True)
-    #
-    #     # Define file names
-    #     image_filename = f"{image_id}.png"
-    #     annotation_filename = f"{image_id}.json"
-    #
-    #     # Save image
-    #     image_path = os.path.join(images_dir, image_filename)
-    #     image.save(image_path)
-    #
-    #     if boxes:
-    #         # Save annotation as JSON
-    #         annotation_data = {"boxes": boxes, "classes": classes}
-    #         annotation_path = os.path.join(annotations_dir, annotation_filename)
-    #         with open(annotation_path, "w") as f:
-    #             json.dump(annotation_data, f)
+    def save_data(self, img, clone, boxes, img_id):
+        """
+        Save the images to a new directory.
 
-    def save_data(self, img, idx):
+        Args:
+            self: class information
+            img(nd.array): Original image preprocessed image
+            clone(nd.array): Object inserted clone of image
+            boxes: List of bounding boxes
+            img_id: Unique image ID representing the index
 
-        # Create the output directory if it doesn't exist
-        os.makedirs(self.out_dir, exist_ok=True)
+        Returns:
+            None: directory
+        """
 
-        # Construct the full path for saving the image
-        out_path = os.path.join(self.out_dir, idx)
+        # Define subdirectories for images and annotations
+        images_dir = os.path.join(self.out_dir, "clones")
+        annotations_dir = os.path.join(self.out_dir, "clone_annotations")
 
-        # Save the image
-        cv2.imwrite(out_path, img)
-        print(f"Image saved at {out_path}")
+        # Create directories if they do not exist
+        os.makedirs(images_dir, exist_ok=True)
+        os.makedirs(annotations_dir, exist_ok=True)
+
+        # Define file name
+        image_filename = img + "_" + f"{img_id}.png"
+        annotation_filename = img + "_" + f"{img_id}.json"
+
+        # Save image
+        image_path = os.path.join(images_dir, image_filename)
+        clone.save(image_path)
+
+        if boxes:
+            # Save annotation as JSON
+            annotation_data = {"boxes": boxes}
+            annotation_path = os.path.join(annotations_dir, annotation_filename)
+            with open(annotation_path, "w") as f:
+                json.dump(annotation_data, f)
+
+        return self
 
     def load_objects(self):
         """
@@ -200,9 +193,11 @@ class ObjectInsertion:
             # Convert BGR to RGB
             obj = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
-            # Increase size of the objects by 1.5
-            resized = cv2.resize(obj, (int(obj.shape[0] * 1.5), int(obj.shape[1] * 1.5)) , interpolation=cv2.INTER_LANCZOS4)
-            self.objects[file] = resized
+            # Filter the objects based on quality
+            if obj.shape > (12, 12):
+                # Increase size of the objects by 1.5
+                resized = cv2.resize(obj, (int(obj.shape[0]), int(obj.shape[1])) , interpolation=cv2.INTER_LANCZOS4)
+                self.objects[file] = resized
 
         return self
 
@@ -319,6 +314,7 @@ class ObjectInsertion:
             selected_obj = matching_objects[np.random.choice(len(matching_objects), replace=False)]
         else:
             # With replacement: You can pick the same object multiple times
+            print("HALLO")
             selected_obj = matching_objects[np.random.choice(len(matching_objects))]
 
         return self.objects[selected_obj], self.masks[selected_obj]
@@ -334,10 +330,14 @@ class ObjectInsertion:
             mask (np.ndarray): Binary mask (uint8, values 0 or 255).
         """
         for file, obj in self.objects.items():
+            # Convert the object image to a binary mask
             gray_obj = cv2.cvtColor(obj, cv2.COLOR_BGR2GRAY)
 
+            # Apply Gaussian blur to reduce the noise
+            blur_mask = cv2.GaussianBlur(gray_obj, (5, 5), 0)
+
             # Auto threshold using Otsu's method
-            _, binary_mask = cv2.threshold(gray_obj, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+            _, binary_mask = cv2.threshold(blur_mask, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
 
             # Morphological operations to clean the mask
             kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3))
@@ -345,8 +345,7 @@ class ObjectInsertion:
             final_mask = cv2.morphologyEx(clean_mask, cv2.MORPH_CLOSE, kernel, iterations=1)
 
             # Apply Gaussian blur to reduce the noise
-            blur_mask = cv2.GaussianBlur(final_mask, (5, 5), 0)
-            self.masks[file] = blur_mask
+            self.masks[file] = final_mask
 
         return self
 
@@ -440,6 +439,52 @@ class ObjectInsertion:
         print(f"SSIM Score: ", round(ssim_score, 3))
         return ssim_score
 
+    @staticmethod
+    def masked_clone(src, dst, mask, center):
+        """
+        Inserts an object from `src` into `dst` using `mask` at a given `center`.
+        Only pixels where the mask is non-zero are replaced.
+
+        Args:
+            src (H, W, 3): Source image containing the object.
+            dst (H', W', 3): Destination (background) image.
+            mask (H, W): Grayscale mask with object as white (255), background as black (0).
+            center (x, y): Tuple indicating where the center of the object should go in dst.
+
+        Returns:
+            dst_copy: A new image with the object inserted.
+        """
+        src_h, src_w = src.shape[:2]
+        dst_h, dst_w = dst.shape[:2]
+        cx, cy = center
+
+        # Calculate the top-left corner in dst where the src will go
+        x1_dst = max(cx - src_w // 2, 0)
+        y1_dst = max(cy - src_h // 2, 0)
+        x2_dst = min(x1_dst + src_w, dst_w)
+        y2_dst = min(y1_dst + src_h, dst_h)
+
+        # Corresponding region in src and mask
+        x1_src = max(0, -(cx - src_w // 2))
+        y1_src = max(0, -(cy - src_h // 2))
+        x2_src = x1_src + (x2_dst - x1_dst)
+        y2_src = y1_src + (y2_dst - y1_dst)
+
+        # Prepare output image
+        dst_copy = dst.copy()
+
+        # Crop the relevant parts to create the region of interest
+        src_crop = src[y1_src:y2_src, x1_src:x2_src]
+        mask_crop = mask[y1_src:y2_src, x1_src:x2_src]
+        roi = dst_copy[y1_dst:y2_dst, x1_dst:x2_dst]
+
+        # Replace pixels in dst only where mask is non-zero
+        object_mask = mask_crop > 0
+        roi[object_mask] = src_crop[object_mask]
+        dst_copy[y1_dst:y2_dst, x1_dst:x2_dst] = roi
+
+        return dst_copy
+
     def object_insertion(self):
         """
         The main function in the object insertion class. It uses the other functions to perform guided object insertion.
@@ -465,15 +510,16 @@ class ObjectInsertion:
             dst_bbox = self.annotations[img]
             print(img, dst_bbox)
 
-            # Create a list to store the new bounding boxes
+            # Create a variables to store information
             new_bbox_lst = list()
-
-            # Store the old image for comparison
+            insert_count = 0
             old_img = self.images[img]
 
             # Some images have multiple bounding boxes
             print(f"Calculating new bounding box for {len(dst_bbox)} images...")
             for bbox in dst_bbox:
+                if insert_count == self.max_insert:
+                    continue
 
                 # Sample an object from the set
                 if self.sample_method == "random":
@@ -483,6 +529,8 @@ class ObjectInsertion:
                     obj = self.objects[obj]
                 else:
                     obj, mask = self.select_candidate_object(bbox)
+                    plt.imshow(mask, cmap="gray")
+                    plt.show()
 
                 # Store the shape of the object image
                 self.obj_size = obj.shape
@@ -492,7 +540,7 @@ class ObjectInsertion:
                 new_bbox = self.find_bbox(bbox, new_bbox_lst)
                 print(bbox, new_bbox)
 
-                # Skip to next bbox if we find a no valid one
+                # Skip to next bbox if we find no valid one
                 if new_bbox is None:
                     continue
 
@@ -503,10 +551,7 @@ class ObjectInsertion:
                 center = int((new_bbox[0] + new_bbox[2]) / 2), int((new_bbox[1] + new_bbox[3]) / 2)
 
                 # Iteratively create a normal clone of the image with an inserted object
-                clone = cv2.seamlessClone(
-                    obj, old_img, mask, center,
-                    flags=cv2.NORMAL_CLONE,
-                )
+                clone = self.masked_clone(obj, old_img, mask, center)
 
                 # Check if the new image has an additional object
                 ssim_score = self.check_insertion(old_img, clone)
@@ -523,12 +568,14 @@ class ObjectInsertion:
                 old_img = clone
 
                 # Save object inserted images to directory
-                #self.save_data(img, f"{img}_{count}")
+                self.save_data(img, clone, new_bbox_lst, insert_count)
                 saves += 1
+                insert_count += 1
 
+                return saves, fails
 
 # Define the directories here:
-root_dir = "E:/Datasets/"
+root_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/"
 img_dir = root_dir + "masati-thesis/images"
 obj_dir = root_dir + "MasatiV2/MasatiV2Boats"
 xml_dir = root_dir + "masati-thesis/annotations"
@@ -544,9 +591,10 @@ augmenter = ObjectInsertion(
     target_size=(224, 224),
     margin=20,
     max_iter=100,
-    sample_method="random"
+    max_insert=3,
+    sample_method="selective"
 )
-augmenter.object_insertion()
+saves, fails = augmenter.object_insertion()
 
 
 
