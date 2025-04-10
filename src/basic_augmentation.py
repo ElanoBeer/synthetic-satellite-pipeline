@@ -6,7 +6,7 @@ import albumentations as A
 
 
 class BasicAugmentation:
-    def __init__(self, img_dir, xml_dir, output_dir, size, p=0.5, height=224, width=224, n_augmentations=1):
+    def __init__(self, img_dir, xml_dir, output_dir, input_size, p=0.5, height=224, width=224, n_augmentations=1):
         """
         Initialize the basic augmentation pipeline.
         This pipeline utilizes albumentations to perform geometric and
@@ -20,7 +20,7 @@ class BasicAugmentation:
         self.img_dir = img_dir
         self.xml_dir = xml_dir
         self.output_dir = output_dir
-        self.size = size
+        self.input_size = input_size
         self.p = p
         self.height = height
         self.width = width
@@ -37,7 +37,10 @@ class BasicAugmentation:
             A.VerticalFlip(p=p),
             A.RandomCrop(height=height, width=width, p=p),
             A.RandomBrightnessContrast(p=p),
-            A.HueSaturationValue(p=p),
+            A.HueSaturationValue(hue_shift_limit=10,       # default is 20
+                                sat_shift_limit=15,       # default is 30
+                                val_shift_limit=10,       # default is 20
+                                p=p),
             A.GaussNoise(std_range=(0.1, 0.25), mean_range=(0,0), p=p)
         ],
             bbox_params=A.BboxParams(format='pascal_voc', label_fields=['class_labels']))
@@ -158,17 +161,11 @@ class BasicAugmentation:
 
         for obj in root.findall('object'):
             name = obj.find('name').text
-            bbox = obj.find('bndbox')
+            bbox = obj.find('boxes')
             xmin = float(bbox.find('xmin').text)
             ymin = float(bbox.find('ymin').text)
             xmax = float(bbox.find('xmax').text)
             ymax = float(bbox.find('ymax').text)
-
-            # Scale bounding boxes
-            xmin = (xmin / self.size) * self.width
-            ymin = (ymin / self.size) * self.height
-            xmax = (xmax / self.size) * self.width
-            ymax = (ymax / self.size) * self.height
 
             boxes.append([xmin, ymin, xmax, ymax])
             class_labels.append(name)
@@ -268,10 +265,10 @@ augmenter = BasicAugmentation(
     img_dir=img_dir,
     xml_dir=xml_dir,
     output_dir=output_dir,
-    size=512,
+    input_size=512,
     p=0.5,
     height=224,
     width=224,
-    n_augmentations=3,
+    n_augmentations=7,
 )
 augmenter.augment()

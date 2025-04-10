@@ -130,7 +130,7 @@ class ObjectInsertion:
                 # Save the annotations for images with objects
                 if os.path.exists(xml_path):
                     boxes, class_labels = self.parse_voc_xml(xml_path)
-                    self.annotations[file] = boxes
+                    self.annotations[file] = [boxes, class_labels]
 
                 else:
                     continue
@@ -171,9 +171,9 @@ class ObjectInsertion:
         cv2.imwrite(image_path, clone_rgb)
 
         # Save annotation as JSON
-        boxes = self.annotations[img]
+        boxes, classes = self.annotations[img][0], self.annotations[img][1]
         annotations = boxes + new_boxes
-        annotation_data = {"boxes": annotations}
+        annotation_data = {"boxes": annotations, "classes": classes}
         annotation_path = os.path.join(annotations_dir, annotation_filename)
         with open(annotation_path, "w") as f:
             json.dump(annotation_data, f)
@@ -198,8 +198,8 @@ class ObjectInsertion:
             obj = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
 
             # Filter the objects based on quality
-            resized = cv2.resize(obj, (int(obj.shape[0]), int(obj.shape[1])) , interpolation=cv2.INTER_LANCZOS4)
-            self.objects[file] = resized
+            #resized = cv2.resize(obj, (int(obj.shape[0]), int(obj.shape[1])) , interpolation=cv2.INTER_LANCZOS4)
+            self.objects[file] = obj
 
         return self
 
@@ -509,7 +509,7 @@ class ObjectInsertion:
 
         # Iterate of the background images
         for img in tqdm(self.annotations.keys()):
-            dst_bbox = self.annotations[img]
+            dst_bbox = self.annotations[img][0]
             print(img, dst_bbox)
 
             # Create a variables to store information
