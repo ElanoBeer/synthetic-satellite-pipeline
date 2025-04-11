@@ -1,6 +1,7 @@
 import os
 import json
 import random
+import shutil
 import xml.etree.ElementTree as ET
 import cv2
 import numpy as np
@@ -131,10 +132,8 @@ class ObjectInsertion:
                 if os.path.exists(xml_path):
                     boxes, class_labels = self.parse_voc_xml(xml_path)
                     self.annotations[file] = [boxes, class_labels]
-
                 else:
                     continue
-
         return self
 
     def save_data(self, img, clone, new_boxes, img_id):
@@ -155,10 +154,6 @@ class ObjectInsertion:
         # Define subdirectories for images and annotations
         images_dir = os.path.join(self.out_dir, "clones")
         annotations_dir = os.path.join(self.out_dir, "clone_annotations")
-
-        # Create directories if they do not exist
-        os.makedirs(images_dir, exist_ok=True)
-        os.makedirs(annotations_dir, exist_ok=True)
 
         # Define file name
         base, _ = os.path.splitext(img)
@@ -487,6 +482,42 @@ class ObjectInsertion:
 
         return dst_copy
 
+    def copy_folder(self):
+        """
+        Copies a folder from src to dst.
+
+        Parameters:
+            src (str): Source folder path.
+            dst (str): Destination folder path.
+
+        Returns:
+            None
+        """
+
+        print(f"Starting storing original datasets")
+
+        # Define subdirectories for images and annotations
+        copy_images_dir = os.path.join(self.out_dir, "clones")
+        copy_annotations_dir = os.path.join(self.out_dir, "clone_annotations")
+
+        # Copy the images in the directory
+        shutil.copytree(self.img_dir, copy_images_dir, dirs_exist_ok=True)
+        os.makedirs(copy_annotations_dir, exist_ok=True)
+        #shutil.copytree(self.xml_dir, copy_annotations_dir, dirs_exist_ok=True)
+
+        # Store the annotations as JSON files
+        for img in tqdm(self.annotations.keys()):
+            annotation_filename = f"{os.path.splitext(img)[0]}.json"
+            boxes, classes = self.annotations[img][0], self.annotations[img][1]
+            annotation_data = {"boxes": boxes, "classes": classes}
+            annotation_path = os.path.join(copy_annotations_dir, annotation_filename)
+            with open(annotation_path, "w") as f:
+                json.dump(annotation_data, f)
+
+        print(f"Folder copied from '{self.img_dir}' to '{copy_images_dir}' successfully.")
+        return self
+
+
     def object_insertion(self):
         """
         The main function in the object insertion class. It uses the other functions to perform guided object insertion.
@@ -500,6 +531,9 @@ class ObjectInsertion:
 
         # Create the object masks
         self.create_masks()
+
+        # Save the original images
+        self.copy_folder()
 
         # Start performing the object insertion
         print(f"Start insertion objects for {len(self.images)} images...")
@@ -554,7 +588,7 @@ class ObjectInsertion:
 
                 # Check if the new image has an additional object
                 ssim_score = self.check_insertion(old_img, clone)
-                score_dct[img] = ssim_score
+                score_dct[img] = float(ssim_score)
                 if ssim_score == 1.0:
                     print(f"Object likely did not insert.")
                     fails += 1
@@ -581,7 +615,7 @@ xml_dir = root_dir + "masati-thesis/annotations"
 output_dir = root_dir + "masati-thesis/"
 
 # Create a ObjectInsertion instance
-augmenter = ObjectInsertion(
+inserter = ObjectInsertion(
     img_dir=img_dir,
     obj_dir=obj_dir,
     xml_dir=xml_dir,
@@ -594,7 +628,8 @@ augmenter = ObjectInsertion(
     sample_method="selective",
     replacement=True
 )
-saves, fails, scores = augmenter.object_insertion()
+saves, fails, scores = inserter.object_insertion()
+print(f"Saves: {saves}, Fails: {fails}, Scores: {scores}")
 
 
 
