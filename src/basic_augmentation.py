@@ -102,9 +102,6 @@ class BasicAugmentation:
         # Load image using OpenCV
         img = cv2.imread(img_path, cv2.IMREAD_COLOR)
 
-        # Convert BGR to RGB
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
         # Resize image
         resized = cv2.resize(img, self.target_size, interpolation=cv2.INTER_LANCZOS4)
 
@@ -130,8 +127,7 @@ class BasicAugmentation:
         for file in tqdm(os.listdir(self.img_dir)):
             if os.path.splitext(file)[1].lower() in valid_extensions:
                 img_path = os.path.join(self.img_dir, file)
-                #img = self.preprocess(image_path)
-                img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+                img = self.preprocess(img_path)
                 self.images[file] = img
 
                 json_file = os.path.splitext(file)[0] + ".json"

@@ -21,7 +21,8 @@ class ObjectInsertion:
                  max_iter=100,
                  max_insert=3,
                  sample_method="selective",
-                 replacement=False):
+                 replacement=False,
+                 seed=1583891):
 
 
         # Initialize input variables
@@ -43,6 +44,9 @@ class ObjectInsertion:
         self.images = dict()
         self.annotations = dict()
         self.masks = dict()
+
+        # Create a random generator with a fixed seed
+        self.rng = np.random.default_rng(seed=seed)
 
 
     def preprocess(self, img_path):
@@ -226,12 +230,12 @@ class ObjectInsertion:
             orig_diag = np.sqrt(width ** 2 + height ** 2) / 2
 
             # Choose a random angle (0 to 360 degrees)
-            angle = random.uniform(0, 2 * np.pi)
+            angle = self.rng.uniform(0, 2 * np.pi)
 
             # Ensure the distance is at least greater than the diagonal
             min_safe_distance = orig_diag + min_distance
             max_safe_distance = orig_diag + max_distance
-            distance = random.uniform(min_safe_distance, max_safe_distance)
+            distance = self.rng.uniform(min_safe_distance, max_safe_distance)
 
             # Then apply distance shift in target space
             new_center_x = center_x + distance * np.cos(angle)
@@ -302,16 +306,16 @@ class ObjectInsertion:
 
         # If no matching object is found
         if not matching_objects:
-            random_obj = np.random.choice(list(self.objects.keys()), replace=False)
+            random_obj = self.rng.choice(list(self.objects.keys()), replace=False)
             return self.objects[random_obj], self.masks[random_obj]
 
         # Randomly select an object from the matching set
         if not self.replacement:
             # Without replacement: Randomly sample one object from the matching set without repeating
-            selected_obj = matching_objects[np.random.choice(len(matching_objects), replace=False)]
+            selected_obj = matching_objects[self.rng.choice(len(matching_objects), replace=False)]
         else:
             # With replacement: You can pick the same object multiple times
-            selected_obj = matching_objects[np.random.choice(len(matching_objects))]
+            selected_obj = matching_objects[self.rng.choice(len(matching_objects))]
 
         return self.objects[selected_obj], self.masks[selected_obj]
 
@@ -622,7 +626,7 @@ inserter = ObjectInsertion(
     out_dir=output_dir,
     input_size=(512,512),
     target_size=(224, 224),
-    margin=20,
+    margin=10,
     max_iter=100,
     max_insert=3,
     sample_method="selective",
