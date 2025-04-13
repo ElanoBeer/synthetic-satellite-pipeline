@@ -1,7 +1,7 @@
 import satellite_cloud_generator as scg
 from tqdm import tqdm
 
-def cloud_generation(dataset, min_lvl=0.2, max_lvl=0.8, locality_degree=2, blur_scaling=0, channel_offset=0):
+def cloud_generation(dataset, min_lvl=0, max_lvl=0.8, locality_degree=2, blur_scaling=0, channel_offset=0):
     """
     Generate clouds over a list of RGB satellite images using satellite_cloud_generator.
 
