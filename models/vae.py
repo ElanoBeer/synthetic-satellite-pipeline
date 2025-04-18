@@ -4,13 +4,16 @@ import torch.nn.functional as F
 from torchvision import transforms, datasets
 from torch.utils.data import DataLoader
 import os
+from PIL import Image
+from tqdm import tqdm
 
 # --- Settings ---
 img_size = 224
-batch_size = 64
+batch_size = 32
 latent_dim = 128
 epochs = 100
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 
 # --- Transformations ---
 transform = transforms.Compose([
@@ -29,9 +32,8 @@ class ImageDataset(torch.utils.data.Dataset):
         return len(self.files)
 
     def __getitem__(self, idx):
-        img = transforms.functional.pil_to_tensor(transforms.functional.to_pil_image(torch.load(self.files[idx])))
-        if self.transform:
-            img = self.transform(img)
+        img = Image.open(self.files[idx]).convert("RGB")
+        img = self.transform(img)
         return img
 
 # Replace with your image folder path
@@ -87,23 +89,27 @@ def vae_loss(x, x_recon, mu, logvar):
     kl_div = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     return recon_loss + kl_div
 
-# --- Initialize Model ---
-model = VAE(latent_dim).to(device)
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
+if __name__ == "__main__":
+    model = VAE(latent_dim).to(device)
+    optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
-# --- Training Loop ---
-for epoch in range(epochs):
-    model.train()
-    total_loss = 0
-    for imgs in dataloader:
-        imgs = imgs.to(device)
-        recon, mu, logvar = model(imgs)
-        loss = vae_loss(imgs, recon, mu, logvar)
+    # --- Training Loop ---
+    for epoch in tqdm(range(epochs)):
+        model.train()
+        total_loss = 0
+        for imgs in dataloader:
+            imgs = imgs.to(device)
+            recon, mu, logvar = model(imgs)
+            loss = vae_loss(imgs, recon, mu, logvar)
 
-        optimizer.zero_grad()
-        loss.backward()
-        optimizer.step()
+            optimizer.zero_grad()
+            loss.backward()
+            optimizer.step()
 
-        total_loss += loss.item()
+            total_loss += loss.item()
 
-    print(f"[Epoch {epoch+1}/{epochs}] Loss: {total_loss/len(dataset):.4f}")
+        print(f"[Epoch {epoch+1}/{epochs}] Loss: {total_loss/len(dataset):.4f}")
+
+    # --- Save the Model ---
+    torch.save(model.state_dict(), "vae_model.pth")
+    print("Model saved as 'vae_model.pth'")

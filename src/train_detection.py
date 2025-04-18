@@ -2,6 +2,10 @@ from torchvision.datasets.vision import VisionDataset
 from torch.utils.data import DataLoader, random_split
 from torchvision.models.detection import FasterRCNN
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
+from torch import amp
+
+scaler = amp.GradScaler(device='cuda')
+
 from PIL import Image
 import torch
 import torchvision
@@ -28,7 +32,7 @@ class SyntheticVesselDataset(VisionDataset):
         self.transforms = transforms
 
     def __getitem__(self, idx):
-        image = Image.open(self.image_paths[idx]).convert("RGB").resize((224, 224))
+        image = Image.open(self.image_paths[idx]).convert("RGB")
 
         boxes = self.annotations[idx]["boxes"]  # List of [x1, y1, x2, y2]
         boxes = [[max(0, b[0]), max(0, b[1]), max(0, b[2]), max(0, b[3])] for b in boxes]  # Ensure non-negative values
@@ -137,7 +141,7 @@ def evaluate_model(model, data_loader, device):
 
             metric.update(preds, targets)
 
-            # For getting validation lowhere pythonss, we need to run in training mode temporarily
+            # For getting validation, we need to run in training mode temporarily
             model.train()
             loss_dict = model(images, targets)
             model.eval()
@@ -168,6 +172,7 @@ def train_model(image_paths, annotations, output_dir, num_epochs=25, batch_size=
 
     # Initialize transforms
     transform = T.Compose([
+        T.Resize((224, 224)),
         T.ToTensor(),
         T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
     ])
@@ -229,26 +234,28 @@ def train_model(image_paths, annotations, output_dir, num_epochs=25, batch_size=
 
     # Training loop
     for epoch in range(num_epochs):
-        # Training phase
         model.train()
         epoch_loss = 0.0
         start_time = time.time()
 
         progress_bar = tqdm(train_loader, desc=f"Epoch {epoch + 1}/{num_epochs}", dynamic_ncols=True)
+
         for images, targets in progress_bar:
             # Move data to device
-            images = list(img.to(device) for img in images)
+            images = [img.to(device) for img in images]
             targets = [{k: v.to(device) for k, v in t.items()} for t in targets]
 
-            # Forward pass
-            loss_dict = model(images, targets)
-            losses = sum(loss for loss in loss_dict.values())
-
-            # Backward pass and optimization
             optimizer.zero_grad()
-            losses.backward()
-            torch.nn.utils.clip_grad_norm_(params, max_norm=1.0)  # Gradient clipping
-            optimizer.step()
+
+            with amp.autocast(device_type='cuda'):  # Mixed precision forward pass
+                loss_dict = model(images, targets)
+                losses = sum(loss for loss in loss_dict.values())
+
+            # Mixed precision backward pass
+            scaler.scale(losses).backward()
+            torch.nn.utils.clip_grad_norm_(params, max_norm=1.0)
+            scaler.step(optimizer)
+            scaler.update()
 
             # Update metrics
             epoch_loss += losses.item()
@@ -265,6 +272,8 @@ def train_model(image_paths, annotations, output_dir, num_epochs=25, batch_size=
         metrics['val_loss'].append(val_metrics['loss'])
         metrics['val_map'].append(val_metrics['map'])
         metrics['val_map50'].append(val_metrics['map50'])
+
+
 
         # Update learning rate based on validation loss
         lr_scheduler.step(val_metrics['loss'])
@@ -338,8 +347,8 @@ if __name__ == "__main__":
         image_paths=image_paths,
         annotations=annotations,
         output_dir=output_dir,
-        num_epochs=25,
-        batch_size=32,
+        num_epochs=12,
+        batch_size=4,
         val_split=0.2,
         lr=0.001
     )
