@@ -16,7 +16,7 @@ class ObjectInsertion:
                  xml_dir,
                  out_dir,
                  input_size,
-                 target_size=(224, 224),
+                 target_size=(480, 480),
                  margin=20,
                  max_iter=100,
                  max_insert=3,
@@ -600,7 +600,7 @@ class ObjectInsertion:
             bbox = [int(top_left_y), int(top_left_x), int(top_left_y + src_h), int(top_left_x + src_w)]
 
             # Store the data, passing the filename
-            self.save_data(filename, inserted, bbox, "1")
+            self.save_data(filename, inserted, bbox, "")
 
         print(f"Finished inserting objects for {len(water_imgs)} images.")
         return self
@@ -699,7 +699,7 @@ class ObjectInsertion:
         return saves, fails, score_dct
 
 # Define the directories here:
-root_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/"
+root_dir = "E:/Datasets/"
 img_dir = root_dir + "masati-thesis/images"
 obj_dir = root_dir + "MasatiV2/MasatiV2Boats"
 xml_dir = root_dir + "masati-thesis/annotations"
@@ -712,7 +712,7 @@ inserter = ObjectInsertion(
     xml_dir=xml_dir,
     out_dir=output_dir,
     input_size=(512,512),
-    target_size=(512, 512),
+    target_size=(480, 480),
     margin=10,
     max_iter=100,
     max_insert=3,
