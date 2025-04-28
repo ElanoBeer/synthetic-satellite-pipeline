@@ -169,15 +169,35 @@ class ObjectInsertion:
         clone_rgb = cv2.cvtColor(clone, cv2.COLOR_BGR2RGB)
         cv2.imwrite(image_path, clone_rgb)
 
-        # Save annotation as JSON
-        boxes, classes = self.annotations[img][0], self.annotations[img][1]
+        # # Save annotation as JSON
+        # boxes, classes = self.annotations[img][0], self.annotations[img][1]
+        # annotations = boxes + new_boxes
+        # annotation_data = {"boxes": annotations, "classes": classes}
+        # annotation_path = os.path.join(annotations_dir, annotation_filename)
+        # with open(annotation_path, "w") as f:
+        #     json.dump(annotation_data, f)
+
+        # Check if annotations for this image exist
+        if img in self.annotations:
+            boxes, classes = self.annotations[img]
+        else:
+            # If no annotations exist, initialize empty lists for boxes and classes
+            boxes, classes = [], []
+
+        # Combine the existing boxes with the new boxes
         annotations = boxes + new_boxes
+
+        # Create the annotation data
         annotation_data = {"boxes": annotations, "classes": classes}
+
+        # Save annotation as JSON
         annotation_path = os.path.join(annotations_dir, annotation_filename)
         with open(annotation_path, "w") as f:
             json.dump(annotation_data, f)
 
         return self
+
+
 
     def load_objects(self):
         """
@@ -522,6 +542,70 @@ class ObjectInsertion:
         return self
 
 
+    def basic_insertion(self):
+        """
+        Perform basic image insertion for images consisting of only water segments.
+        """
+
+        # Obtain the images that are water segments only
+        water_imgs = {filename: img for filename, img in self.images.items() if filename.startswith('w')}
+
+        # Start performing the object insertion
+        print(f"Start insertion objects for {len(water_imgs)} images...")
+
+        # Iterate over the water segment images
+        for filename, dst in tqdm(water_imgs.items(), total=len(water_imgs)):
+            # Obtain a random object from the object library
+            obj_path = self.rng.choice(list(self.objects.keys()), replace=False)
+            mask = self.masks[obj_path]  # Assume mask is 2D
+            obj = self.objects[obj_path]  # obj is 3D (height, width, channels)
+
+            # Prepare an output image
+            inserted = dst.copy()
+            src_h, src_w = obj.shape[:2]
+            dst_h, dst_w = dst.shape[:2]
+
+            # Provide the acceptable ranges for object placement
+            min_x = src_w + self.margin
+            min_y = src_h + self.margin
+            max_x = dst_w - src_w - self.margin  # Subtract object width
+            max_y = dst_h - src_h - self.margin  # Subtract object height
+
+            # Calculate a random coordinate that serves as the centroid for the insertion
+            center_y = self.rng.choice(np.arange(min_y, max_y))
+            center_x = self.rng.choice(np.arange(min_x, max_x))
+
+            # Calculate top-left corner of the object based on the centroid
+            top_left_y, top_left_x = center_y - src_h // 2, center_x - src_w // 2
+
+            # Ensure the coordinates are within the image bounds
+            top_left_y, top_left_x = max(top_left_y, 0), max(top_left_x, 0)
+
+            # Slice the region in the destination image (ROI)
+            roi = inserted[top_left_y:top_left_y + src_h, top_left_x:top_left_x + src_w]
+
+            # Create a binary mask of the object location
+            object_mask = mask[:src_h, :src_w] > 0  # Make sure to match the object's size
+
+            # Ensure object and roi are the same shape, no broadcasting required
+            obj_crop = obj[:src_h, :src_w]  # Crop the object to match the mask dimensions
+
+            # Replace pixels in dst only where the mask is non-zero
+            roi[object_mask] = obj_crop[object_mask]
+
+            # Update the inserted image with the new ROI
+            inserted[top_left_y:top_left_y + src_h, top_left_x:top_left_x + src_w] = roi
+
+            # Calculate the bounding box (top-left and bottom-right corners)
+            bbox = [int(top_left_y), int(top_left_x), int(top_left_y + src_h), int(top_left_x + src_w)]
+
+            # Store the data, passing the filename
+            self.save_data(filename, inserted, bbox, "1")
+
+        print(f"Finished inserting objects for {len(water_imgs)} images.")
+        return self
+
+
     def object_insertion(self):
         """
         The main function in the object insertion class. It uses the other functions to perform guided object insertion.
@@ -538,6 +622,9 @@ class ObjectInsertion:
 
         # Save the original images
         self.copy_folder()
+
+        # Insert vessels in the water images
+        self.basic_insertion()
 
         # Start performing the object insertion
         print(f"Start insertion objects for {len(self.images)} images...")
@@ -612,7 +699,7 @@ class ObjectInsertion:
         return saves, fails, score_dct
 
 # Define the directories here:
-root_dir = "E:/Datasets/"
+root_dir = "C:/Users/20202016/Documents/Master/Master Thesis/Datasets/"
 img_dir = root_dir + "masati-thesis/images"
 obj_dir = root_dir + "MasatiV2/MasatiV2Boats"
 xml_dir = root_dir + "masati-thesis/annotations"
@@ -625,7 +712,7 @@ inserter = ObjectInsertion(
     xml_dir=xml_dir,
     out_dir=output_dir,
     input_size=(512,512),
-    target_size=(224, 224),
+    target_size=(512, 512),
     margin=10,
     max_iter=100,
     max_insert=3,
