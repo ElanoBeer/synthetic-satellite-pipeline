@@ -116,17 +116,11 @@ class VesselDetection:
             img_dst = os.path.join(images_output_dir, img_name)
 
             if os.path.exists(img_src):
+                shutil.copy(img_src, img_dst)
+
                 # Open image
                 img = Image.open(img_src)
-
-                # Resize image
-                img_resized = img.resize(self.img_size)
-
-                # Save resized image to output directory
-                img_resized.save(img_dst)
-
-                # Get resized image dimensions (should now be 640, 640)
-                img_width, img_height = img_resized.size
+                img_width, img_height = img.size
 
                 # Create label file (txt format for YOLO)
                 label_filename = os.path.splitext(img_name)[0] + '.txt'
@@ -159,31 +153,33 @@ class VesselDetection:
                         if isinstance(bbox_data, list) and len(bbox_data) >= 4:
                             # If it's a simple list of coordinates
                             x, y, w, h = bbox_data[:4]
-                        elif isinstance(bbox_data, dict):
-                            if 'bbox' in bbox_data:
-                                x, y, w, h = bbox_data['bbox']
-                            elif all(k in bbox_data for k in ['x', 'y', 'width', 'height']):
-                                x, y, w, h = bbox_data['x'], bbox_data['y'], bbox_data['width'], bbox_data[
-                                    'height']
-                            else:
-                                # Try other common formats
-                                if all(k in bbox_data for k in ['xmin', 'ymin', 'xmax', 'ymax']):
-                                    xmin, ymin, xmax, ymax = bbox_data['xmin'], bbox_data['ymin'], bbox_data[
-                                        'xmax'], bbox_data['ymax']
-                                    x, y = xmin, ymin
-                                    w, h = xmax - xmin, ymax - ymin
-                                else:
-                                    print(f"Warning: Unrecognized bbox format in {img_name}")
-                                    continue
+                        # elif isinstance(bbox_data, dict):
+                        #     if 'bbox' in bbox_data:
+                        #         x, y, w, h = bbox_data['bbox']
+                        #     elif all(k in bbox_data for k in ['x', 'y', 'width', 'height']):
+                        #         x, y, w, h = bbox_data['x'], bbox_data['y'], bbox_data['width'], bbox_data[
+                        #             'height']
+                        #     else:
+                        #         # Try other common formats
+                        #         if all(k in bbox_data for k in ['xmin', 'ymin', 'xmax', 'ymax']):
+                        #             xmin, ymin, xmax, ymax = bbox_data['xmin'], bbox_data['ymin'], bbox_data[
+                        #                 'xmax'], bbox_data['ymax']
+                        #             x, y = xmin, ymin
+                        #             w, h = xmax - xmin, ymax - ymin
+                        #         else:
+                        #             print(f"Warning: Unrecognized bbox format in {img_name}")
+                        #             continue
                         else:
                             print(f"Warning: Could not parse bbox data in {img_name}")
                             continue
 
-                        # Convert to YOLO format
-                        x_center = (x + w / 2) / img_width
-                        y_center = (y + h / 2) / img_height
-                        width = w / img_width
-                        height = h / img_height
+                        xmin, ymin, xmax, ymax = bbox_data
+
+                        # Compute YOLO format values
+                        x_center = ((xmin + xmax) / 2) / img_width
+                        y_center = ((ymin + ymax) / 2) / img_height
+                        width = (xmax - xmin) / img_width
+                        height = (ymax - ymin) / img_height
 
                         cls_id = 0  # Assuming 'vessel' is the only class
                         bboxes.append((cls_id, x_center, y_center, width, height))

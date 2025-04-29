@@ -137,7 +137,7 @@ class ObjectInsertion:
                     boxes, class_labels = self.parse_voc_xml(xml_path)
                     self.annotations[file] = [boxes, class_labels]
                 else:
-                    continue
+                    self.annotations[file] = [[], []]
         return self
 
     def save_data(self, img, clone, new_boxes, img_id):
@@ -177,12 +177,14 @@ class ObjectInsertion:
         # with open(annotation_path, "w") as f:
         #     json.dump(annotation_data, f)
 
-        # Check if annotations for this image exist
-        if img in self.annotations:
-            boxes, classes = self.annotations[img]
-        else:
-            # If no annotations exist, initialize empty lists for boxes and classes
-            boxes, classes = [], []
+        # # Check if annotations for this image exist
+        # if img in self.annotations:
+        #     boxes, classes = self.annotations[img]
+        # else:
+        #     # If no annotations exist, initialize empty lists for boxes and classes
+        #     boxes, classes = [], []
+
+        boxes, classes = self.annotations[img]
 
         # Combine the existing boxes with the new boxes
         annotations = boxes + new_boxes
@@ -196,8 +198,6 @@ class ObjectInsertion:
             json.dump(annotation_data, f)
 
         return self
-
-
 
     def load_objects(self):
         """
@@ -597,10 +597,10 @@ class ObjectInsertion:
             inserted[top_left_y:top_left_y + src_h, top_left_x:top_left_x + src_w] = roi
 
             # Calculate the bounding box (top-left and bottom-right corners)
-            bbox = [int(top_left_y), int(top_left_x), int(top_left_y + src_h), int(top_left_x + src_w)]
+            bbox = [[int(top_left_y), int(top_left_x), int(top_left_y + src_h), int(top_left_x + src_w)]]
 
             # Store the data, passing the filename
-            self.save_data(filename, inserted, bbox, "")
+            self.save_data(filename, inserted, bbox, "1")
 
         print(f"Finished inserting objects for {len(water_imgs)} images.")
         return self
