@@ -698,29 +698,31 @@ class ObjectInsertion:
 
         return saves, fails, score_dct
 
-# Define the directories here:
-root_dir = "E:/Datasets/"
-img_dir = root_dir + "masati-thesis/images"
-obj_dir = root_dir + "MasatiV2/MasatiV2Boats"
-xml_dir = root_dir + "masati-thesis/annotations"
-output_dir = root_dir + "masati-thesis/"
+if __name__ == "__main__":
 
-# Create a ObjectInsertion instance
-inserter = ObjectInsertion(
-    img_dir=img_dir,
-    obj_dir=obj_dir,
-    xml_dir=xml_dir,
-    out_dir=output_dir,
-    input_size=(512,512),
-    target_size=(480, 480),
-    margin=10,
-    max_iter=100,
-    max_insert=3,
-    sample_method="selective",
-    replacement=True
-)
-saves, fails, scores = inserter.object_insertion()
-print(f"Saves: {saves}, Fails: {fails}, Scores: {scores}")
+    # Define the directories here:
+    root_dir = "E:/Datasets/"
+    img_dir = root_dir + "masati-thesis/images"
+    obj_dir = root_dir + "MasatiV2/MasatiV2Boats"
+    xml_dir = root_dir + "masati-thesis/annotations"
+    output_dir = root_dir + "masati-thesis/"
+
+    # Create a ObjectInsertion instance
+    inserter = ObjectInsertion(
+        img_dir=img_dir,
+        obj_dir=obj_dir,
+        xml_dir=xml_dir,
+        out_dir=output_dir,
+        input_size=(512,512),
+        target_size=(480, 480),
+        margin=10,
+        max_iter=100,
+        max_insert=3,
+        sample_method="selective",
+        replacement=True
+    )
+    saves, fails, scores = inserter.object_insertion()
+    print(f"Saves: {saves}, Fails: {fails}, Scores: {scores}")
 
 
 

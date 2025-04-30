@@ -1,8 +1,5 @@
-#from object_insertion import *
-import io
 import os
 import json
-import numpy as np
 import albumentations as A
 import cv2
 from tqdm import tqdm
@@ -142,6 +139,7 @@ class BasicAugmentation:
 
         return self
 
+    @staticmethod
     def parse_annotation_json(self, json_path):
         """
         Parse JSON annotation file to extract bounding boxes and class labels.
@@ -249,21 +247,22 @@ class BasicAugmentation:
 
         return self
 
-# Define the directories here:
-root_dir = "E:/Datasets/"
-img_dir = root_dir + "masati-thesis/clones"
-json_dir = root_dir + "masati-thesis/clone_annotations"
-output_dir = root_dir + "masati-thesis/"
+if __name__ == "__main__":
 
+    # Define the directories here:
+    root_dir = "E:/Datasets/"
+    img_dir = root_dir + "masati-thesis/clones"
+    json_dir = root_dir + "masati-thesis/clone_annotations"
+    output_dir = root_dir + "masati-thesis/"
 
-# Create a BasicAugmentation instance
-augmenter = BasicAugmentation(
-    img_dir=img_dir,
-    json_dir=json_dir,
-    output_dir=output_dir,
-    input_size=(224, 224),
-    target_size=(224, 224),
-    p=0.5,
-    n_augmentations=7,
-)
-augmenter.augment()
+    # Create a BasicAugmentation instance
+    augmenter = BasicAugmentation(
+        img_dir=img_dir,
+        json_dir=json_dir,
+        output_dir=output_dir,
+        input_size=(512, 512),
+        target_size=(512, 512),
+        p=0.5,
+        n_augmentations=7,
+    )
+    augmenter.augment()
