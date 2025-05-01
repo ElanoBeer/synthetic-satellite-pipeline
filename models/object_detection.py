@@ -268,8 +268,8 @@ class VesselDetection:
                 'fold': fold,
                 'map50': val_results.box.map50,
                 'map50-95': val_results.box.map,
-                'precision': val_results.box.precision,
-                'recall': val_results.box.recall
+                'precision': val_results.box.p,
+                'recall': val_results.box.r
             }
             all_results.append(metrics)
 
