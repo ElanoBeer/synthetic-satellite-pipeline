@@ -28,6 +28,10 @@ class BasicAugmentation:
         # Define information to store
         self.images = dict()
         self.annotations = dict()
+        self.dataset = {
+            "images": {},
+            "annotations": {},
+        }
 
         # Use the albumentations library for basic transformations
         self.transform = A.Compose(transforms=[
@@ -97,7 +101,7 @@ class BasicAugmentation:
                 PIL.Image: Preprocessed image
             """
         # Load image using OpenCV
-        img = cv2.imread(img_path, cv2.IMREAD_COLOR)
+        img = cv2.imread(img_path)
 
         # Resize image
         resized = cv2.resize(img, self.target_size, interpolation=cv2.INTER_LANCZOS4)
@@ -140,7 +144,7 @@ class BasicAugmentation:
         return self
 
     @staticmethod
-    def parse_annotation_json(self, json_path):
+    def parse_annotation_json(json_path):
         """
         Parse JSON annotation file to extract bounding boxes and class labels.
 
@@ -178,8 +182,8 @@ class BasicAugmentation:
         """
 
         # Define subdirectories for images and annotations
-        images_dir = os.path.join(self.output_dir, "augmented-images")
-        annotations_dir = os.path.join(self.output_dir, "augmented-annotations")
+        images_dir = os.path.join(self.output_dir, "2_augmentation")
+        annotations_dir = os.path.join(self.output_dir, "2_augmentation_annotation")
 
         # Create directories if they do not exist
         os.makedirs(images_dir, exist_ok=True)
@@ -187,35 +191,38 @@ class BasicAugmentation:
 
         # Define file name
         base, _ = os.path.splitext(img)
-        image_filename = base + "_" + f"{img_id}.png"
-        annotation_filename = base + "_" + f"{img_id}.json"
+        image_filename = base + "_aug" + f"{img_id}.png"
+        annotation_filename = base + "_aug" + f"{img_id}.json"
 
         # Save image
         image_path = os.path.join(images_dir, image_filename)
-        #augmented_rgb = cv2.cvtColor(augmented_img, cv2.COLOR_BGR2RGB)
-        cv2.imwrite(image_path, augmented_img)
+        augmented_rgb = cv2.cvtColor(augmented_img, cv2.COLOR_BGR2RGB)
+        self.dataset["images"][image_filename] = augmented_rgb
+        cv2.imwrite(image_path, augmented_rgb)
 
         # Save annotation as JSON
         annotation_data = {"boxes": new_boxes}
         annotation_path = os.path.join(annotations_dir, annotation_filename)
+        self.dataset["annotations"][image_filename] = annotation_data
         with open(annotation_path, "w") as f:
             json.dump(annotation_data, f)
 
         return self
 
-    def augment(self):
+    def augment(self, load = True):
         """
         Apply augmentations to an image.
 
         Args:
-            image (PIL.Image): Input image
+            load (bool): Flag to load the data from the directories if not already loaded.
 
         Returns:
             PIL.Image: Augmented image
         """
 
         # Load the images and annotations from the directories
-        self.load_data()
+        if load:
+            self.load_data()
 
         # Calculate final dataset size
         print(f"Calculating augmented dataset size...")
@@ -228,7 +235,7 @@ class BasicAugmentation:
         for img in tqdm(self.images.keys()):
 
             # Retrieve bounding boxes and class labels using the filename
-            boxes = self.annotations[img]
+            boxes = self.annotations[img][0]
             class_labels = ["ship" for _ in boxes]
 
             for i in range(self.n_augmentations):

@@ -1,5 +1,9 @@
 import os
+import random
 import shutil
+import json
+import cv2
+from tqdm import tqdm
 from object_insertion import ObjectInsertion
 from basic_augmentation import BasicAugmentation
 from cloud_generator import CloudGenerator
@@ -41,7 +45,8 @@ class ImageGenerationPipeline:
                  locality_degree=2,
                  blur_scaling=0,
                  channel_offset=0,
-                 max_shadow_intensity=0.25):
+                 max_shadow_intensity=0.25,
+                 cloud_probability=0.5):
         """
         Initialize the pipeline with parameters for all three components.
 
@@ -64,15 +69,15 @@ class ImageGenerationPipeline:
 
             # Basic Augmentation parameters
             aug_probability: Probability of applying each augmentation
-            brightness_range: Range for brightness adjustment
-            contrast_range: Range for contrast adjustment
-            noise_range: Range for noise addition
-            blur_range: Range for blur effect
+            n_augmentations: Number of augmentations to apply to each image
 
             # Cloud Generator parameters
-            cloud_density: Density of cloud cover
-            cloud_opacity: Range of cloud opacity
-            shadow_intensity: Intensity of cloud shadows
+            min_cloud_intensity: Minimum cloud intensity
+            max_cloud_intensity: Maximum cloud intensity
+            locality_degree: Degree of locality for cloud generation
+            blur_scaling: Scaling factor for blurring
+            channel_offset: Offset for cloud generation
+            max_shadow_intensity: Maximum shadow intensity for cloud generation
         """
         # Store all parameters
         self.params = {
@@ -95,6 +100,9 @@ class ImageGenerationPipeline:
             # Basic Augmentation
             "aug_probability": aug_probability,
             "n_augmentations": n_augmentations,
+            "huesat_values":{"hue_shift_limit": 10, "sat_shift_limit": 15, "val_shift_limit": 10},
+            "gauss_noise_std": (0.1, 0.25),
+            "gauss_noise_mean": (0,0),
 
             # Cloud Generator
             "min_cloud_intensity": min_cloud_intensity,
@@ -103,24 +111,38 @@ class ImageGenerationPipeline:
             "blur_scaling": blur_scaling,
             "channel_offset": channel_offset,
             "max_shadow_intensity": max_shadow_intensity,
+            "cloud_probability": cloud_probability
         }
 
         # Initialize component directories
+
+        self.original_images_output = os.path.join(output_dir, "0_original_images")
+        self.original_annotation_output = os.path.join(output_dir, "0_original_annotation")
         self.obj_insertion_output = os.path.join(output_dir, "1_object_insertion")
         self.obj_annotation_output = os.path.join(output_dir, "1_object_annotation")
         self.augmentation_output = os.path.join(output_dir, "2_augmentation")
-        self.final_output = os.path.join(output_dir, "3_final_images")
+        self.augmentation_annotation_output = os.path.join(output_dir, "2_augmentation_annotation")
+        self.cloud_generation_output = os.path.join(output_dir, "3_cloud_generation")
+        self.cloud_annotation_output = os.path.join(output_dir, "3_cloud_annotation")
 
         # Ensure output directories exist
         os.makedirs(output_dir, exist_ok=True)
+        os.makedirs(self.original_images_output, exist_ok=True)
+        os.makedirs(self.original_annotation_output, exist_ok=True)
         os.makedirs(self.obj_insertion_output, exist_ok=True)
+        os.makedirs(self.obj_annotation_output, exist_ok=True)
         os.makedirs(self.augmentation_output, exist_ok=True)
-        os.makedirs(self.final_output, exist_ok=True)
+        os.makedirs(self.augmentation_annotation_output, exist_ok=True)
+        os.makedirs(self.cloud_generation_output, exist_ok=True)
+        os.makedirs(self.cloud_annotation_output, exist_ok=True)
 
         # Initialize components (will be created during run)
         self.inserter = None
+        self.original_augmenter = None
+        self.insertion_augmenter = None
         self.augmenter = None
         self.cloud_gen = None
+        self.tracker = None
 
     def run(self):
         """
@@ -137,7 +159,7 @@ class ImageGenerationPipeline:
             img_dir=self.params["img_dir"],
             obj_dir=self.params["obj_dir"],
             xml_dir=self.params["xml_dir"],
-            out_dir=self.obj_insertion_output,
+            out_dir=self.params["output_dir"],
             input_size=self.params["input_size"],
             target_size=self.params["target_size"],
             max_iter=self.params["max_iter"],
@@ -149,19 +171,28 @@ class ImageGenerationPipeline:
         )
         self.inserter.object_insertion()
         print(f"Object insertion complete. Images saved to {self.obj_insertion_output}")
+        self.tracker = self.inserter.dataset
 
         # Step 2: Basic Augmentation
         print("\n--- Step 2: Basic Augmentation ---")
         self.augmenter = BasicAugmentation(
-            img_dir=self.obj_insertion_output,
-            json_dir=self.obj_annotation_output,
-            output_dir=self.augmentation_output,
+            img_dir=self.original_images_output,
+            json_dir=self.original_annotation_output,
+            output_dir=self.params["output_dir"],
             input_size=self.params["input_size"],
             target_size=self.params["target_size"],
             p=self.params["aug_probability"],
             n_augmentations=self.params["n_augmentations"]
         )
-        self.augmenter.augment()
+
+        self.augmenter.images = self.tracker["images"]
+        self.augmenter.annotations = self.tracker["annotations"]
+        print(f"Length of annotations: {len(self.augmenter.annotations)}")
+        self.augmenter.augment(load=False)
+
+        self.tracker["images"].update(self.augmenter.dataset["images"])
+        self.tracker["annotations"].update(self.augmenter.dataset["annotations"])
+
         print(f"Augmentation complete. Images saved to {self.augmentation_output}")
 
         # Step 3: Cloud Generation
@@ -173,51 +204,118 @@ class ImageGenerationPipeline:
             blur_scaling=self.params["blur_scaling"],
             channel_offset=self.params["channel_offset"],
             shadow_max_lvl=self.params["max_shadow_intensity"],
+            cloud_probability=self.params["cloud_probability"],
         )
 
-        # Apply cloud generation to each image
-        image_files = [f for f in os.listdir(self.augmentation_output)
-                       if f.endswith(('.jpg', '.png', '.jpeg'))]
+        # Extract all files to sample from for cloud generation
+        # image_lst = self._extract_files()
+        # image_lst = random.sample(image_lst, 5000)
+        # image_dataset = [
+        #     cv2.imread(f, cv2.IMREAD_COLOR)
+        #     for f in tqdm(image_lst)
+        # ]
 
-        # add preprocess here
+        # # Apply cloud generation to each image
+        # clouded_images = self.cloud_gen.generate_clouds(list(self.tracker["images"].values()))
+        # #cl_values, _, _ = zip(*clouded_images)
+        #
+        # # Save the generated images with clouds and annotations
+        # self.cloud_gen.save_data(clouded_images, self.augmentation_output,
+        #                          self.params["output_dir"], self.augmentation_annotation_output)
 
-        self.cloud_gen.generate_clouds()
+        # Apply cloud generation to each image and save immediately to save memory
+        print("Generating clouds for images...")
 
-        print(f"Cloud generation complete. Final images saved to {self.final_output}")
+        # Process and save images one by one with their filenames
+        for filename, image in tqdm(self.tracker["images"].items(), desc="Processing images"):
+            result = self.cloud_gen.generate_clouds(image)
+
+            if result is not None:
+                cl, _, _ = result  # Clouded image, cloud mask, shadow mask
+                self.cloud_gen.save_data(cl, filename,
+                                                 self.params["output_dir"],
+                                                 self.augmentation_annotation_output)
+
+        print(f"Cloud generation complete. Final images saved to {self.cloud_generation_output}")
 
         # Print parameters summary for reference
-        self.print_parameters()
+        self.print_parameters(save_path=os.path.join(self.params["output_dir"], "parameters.txt"))
 
-        return self.final_output
+        return self.cloud_generation_output
 
-    def print_parameters(self):
-        """Print all parameters used in the pipeline for reference"""
-        print("\n=== Pipeline Parameters ===")
+    # def _extract_files(self):
+    #     """Extract all image files from the output directory"""
+    #
+    #     # Gather all images file paths from directories
+    #     image_lst = list()
+    #     for root, dirs, files in tqdm(os.walk(self.params["output_dir"])):
+    #         for file in files:
+    #             if file.endswith(('.jpg', '.png', '.jpeg')):
+    #                 image_lst.append(os.path.join(root, file))
+    #
+    #     return image_lst
 
-        print("\nObject Insertion Parameters:")
+
+    def print_parameters(self, save_path=None):
+        """Print all parameters used in the pipeline and optionally save to a text file"""
+
+        lines = list()
+        lines.append("\n=== Pipeline Parameters ===\n")
+        lines.append(f"Random Seed: {self.params['seed']}\n")
+
+        lines.append("\nObject Insertion Parameters:")
         for key in ["img_dir", "obj_dir", "xml_dir", "input_size", "target_size",
                     "max_iter", "margin", "max_insert", "sample_method", "replacement"]:
-            print(f"  - {key}: {self.params[key]}")
+            lines.append(f"  - {key}: {self.params[key]}")
 
-        print("\nAugmentation Parameters:")
-        for key in ["aug_probability", "brightness_range", "contrast_range",
-                    "noise_range", "blur_range"]:
-            print(f"  - {key}: {self.params[key]}")
+        lines.append("\nAugmentation Parameters:")
+        for key in ["aug_probability", "n_augmentations", "huesat_values", "gauss_noise_std", "gauss_noise_mean"]:
+            lines.append(f"  - {key}: {self.params[key]}")
 
-        print("\nCloud Generation Parameters:")
-        for key in ["cloud_density", "cloud_opacity", "shadow_intensity", "seed"]:
-            print(f"  - {key}: {self.params[key]}")
+        lines.append("\nCloud Generation Parameters:")
+        for key in ["min_cloud_intensity", "max_cloud_intensity", "locality_degree", "blur_scaling", "channel_offset",
+                    "max_shadow_intensity", "cloud_probability"]:
+            lines.append(f"  - {key}: {self.params[key]}")
+
+        # Print to console
+        print("\n".join(lines))
+
+        # Optionally write to a file
+        if save_path:
+            with open(save_path, "w") as f:
+                f.write("\n".join(lines))
+            print(f"\nParameter log saved to: {save_path}")
 
 
 # Example usage:
 if __name__ == "__main__":
     pipeline = ImageGenerationPipeline(
-        root_dir="data",
-        output_dir="output/synthetic_images",
-        # You can override any default parameters here
-        max_insert=3,
-        cloud_density=0.4,
-        seed=42
+        root_dir="E:/Datasets/masati-thesis",
+        img_dir="E:/Datasets/masati-thesis/images",
+        obj_dir="E:/Datasets/MasatiV2/MasatiV2Boats",
+        xml_dir="E:/Datasets/masati-thesis/annotations",
+        output_dir="E:/Datasets/masati-thesis/synthetic_images",
+        seed=89,
+        input_size=(512, 512),
+        target_size=(256, 256),
+        max_iter=100,
+        margin=10,
+        max_insert=1,
+        sample_method='selective',
+        replacement=True,
+
+        # Basic Augmentation parameters
+        aug_probability=0.5,
+        n_augmentations=1,
+
+        # Cloud Generator parameters
+        min_cloud_intensity=0,
+        max_cloud_intensity=0.8,
+        locality_degree=2,
+        blur_scaling=0,
+        channel_offset=0,
+        max_shadow_intensity=0.25,
+        cloud_probability=0.2,
     )
 
     output_path = pipeline.run()

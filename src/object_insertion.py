@@ -44,6 +44,10 @@ class ObjectInsertion:
         self.images = dict()
         self.annotations = dict()
         self.masks = dict()
+        self.dataset = {
+            "images": {},
+            "annotations": {}
+        }
 
         # Create a random generator with a fixed seed
         self.rng = np.random.default_rng(seed=seed)
@@ -128,6 +132,7 @@ class ObjectInsertion:
                 image_path = os.path.join(self.img_dir, file)
                 img = self.preprocess(image_path)
                 self.images[file] = img
+                self.dataset["images"][file] = img
 
                 xml_file = os.path.splitext(file)[0] + ".xml"
                 xml_path = os.path.join(self.xml_dir, xml_file)
@@ -136,8 +141,11 @@ class ObjectInsertion:
                 if os.path.exists(xml_path):
                     boxes, class_labels = self.parse_voc_xml(xml_path)
                     self.annotations[file] = [boxes, class_labels]
+                    self.dataset["annotations"][file] = [boxes, class_labels]
                 else:
                     self.annotations[file] = [[], []]
+                    self.dataset["annotations"][file] = [[], []]
+
         return self
 
     def save_data(self, img, clone, new_boxes, img_id):
@@ -156,8 +164,8 @@ class ObjectInsertion:
         """
 
         # Define subdirectories for images and annotations
-        images_dir = os.path.join(self.out_dir, "clones")
-        annotations_dir = os.path.join(self.out_dir, "clone_annotations")
+        images_dir = os.path.join(self.out_dir, "1_object_insertion")
+        annotations_dir = os.path.join(self.out_dir, "1_object_annotation")
 
         # Define file name
         base, _ = os.path.splitext(img)
@@ -167,6 +175,7 @@ class ObjectInsertion:
         # Save image
         image_path = os.path.join(images_dir, image_filename)
         clone_rgb = cv2.cvtColor(clone, cv2.COLOR_BGR2RGB)
+        self.dataset["images"][image_filename] = clone_rgb
         cv2.imwrite(image_path, clone_rgb)
 
         # # Save annotation as JSON
@@ -191,6 +200,7 @@ class ObjectInsertion:
 
         # Create the annotation data
         annotation_data = {"boxes": annotations, "classes": classes}
+        self.dataset["annotations"][image_filename] = [annotations, classes]
 
         # Save annotation as JSON
         annotation_path = os.path.join(annotations_dir, annotation_filename)
@@ -457,7 +467,7 @@ class ObjectInsertion:
 
         # Calculate SSIM
         ssim_score = metrics.structural_similarity(image1_gray, image2_gray)
-        print(f"SSIM Score: ", round(ssim_score, 3))
+        #print(f"SSIM Score: ", round(ssim_score, 3))
         return ssim_score
 
     @staticmethod
@@ -518,11 +528,11 @@ class ObjectInsertion:
             None
         """
 
-        print(f"Starting storing original datasets")
+        print(f"Copying folder from '{self.img_dir}' to '{self.out_dir}'...")
 
         # Define subdirectories for images and annotations
-        copy_images_dir = os.path.join(self.out_dir, "clones")
-        copy_annotations_dir = os.path.join(self.out_dir, "clone_annotations")
+        copy_images_dir = os.path.join(self.out_dir, "0_original_images")
+        copy_annotations_dir = os.path.join(self.out_dir, "0_original_annotation")
 
         # Copy the images in the directory
         shutil.copytree(self.img_dir, copy_images_dir, dirs_exist_ok=True)
@@ -635,7 +645,7 @@ class ObjectInsertion:
         # Iterate of the background images
         for img in tqdm(self.annotations.keys()):
             dst_bbox = self.annotations[img][0]
-            print(img, dst_bbox)
+            #print(img, dst_bbox)
 
             # Create a variables to store information
             new_bbox_lst = list()
@@ -643,7 +653,7 @@ class ObjectInsertion:
             old_img = self.images[img]
 
             # Some images have multiple bounding boxes
-            print(f"Calculating new bounding box for {len(dst_bbox)} images...")
+            #print(f"Calculating new bounding box for {len(dst_bbox)} images...")
             for bbox in dst_bbox:
                 if insert_count == self.max_insert:
                     continue
@@ -659,10 +669,10 @@ class ObjectInsertion:
                 # Store the shape of the object image
                 self.obj_size = obj.shape
 
-                print(f"Finding new bounding box...")
+                #print(f"Finding new bounding box...")
                 # Calculate a new bbox for insertion
                 new_bbox = self.find_bbox(bbox, new_bbox_lst)
-                print(bbox, new_bbox)
+                #print(bbox, new_bbox)
 
                 # Skip to next bbox if we find no valid one
                 if new_bbox is None:

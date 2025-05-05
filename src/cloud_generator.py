@@ -1,8 +1,11 @@
+import cv2
 import satellite_cloud_generator as scg
 import torch
 import numpy as np
-from tqdm import tqdm
+import os
 import matplotlib.pyplot as plt
+import shutil
+from tqdm import tqdm
 
 
 class CloudGenerator:
@@ -12,7 +15,7 @@ class CloudGenerator:
     """
 
     def __init__(self, min_lvl=0, max_lvl=0.8, locality_degree=2, blur_scaling=0, channel_offset=0,
-                 shadow_max_lvl=0.25):
+                 shadow_max_lvl=0.25, cloud_probability=0.5):
         """
         Initialize the cloud generator with default cloud generation parameters.
 
@@ -23,6 +26,8 @@ class CloudGenerator:
             blur_scaling (float): Gaussian blur scaling for cloud mask.
             channel_offset (float): Channel offset for cloud overlay.
             shadow_max_lvl (float): Maximum intensity level for shadow mask.
+            cloud_probability (float): Probability of generating clouds for an image (0.0-1.0).
+
         """
         self.min_lvl = min_lvl
         self.max_lvl = max_lvl
@@ -30,27 +35,77 @@ class CloudGenerator:
         self.blur_scaling = blur_scaling
         self.channel_offset = channel_offset
         self.shadow_max_lvl = shadow_max_lvl
+        self.cloud_probability = cloud_probability
 
-    def generate_clouds(self, dataset):
+    # def generate_clouds(self, dataset):
+    #     """
+    #     Generate clouds over a list of RGB satellite images.
+    #
+    #     Args:
+    #         dataset (list): List or iterable of images (e.g., numpy arrays or PIL images).
+    #
+    #     Returns:
+    #         list: A list of tuples [(clouded_img, cloud_mask, shadow_mask), ...].
+    #     """
+    #     cloud_dataset = []
+    #
+    #     # # Iterate over the dataset and generate clouds per image
+    #     # for img in tqdm(dataset, desc="Generating clouds"):
+    #         # Convert image to numpy array and normalize
+    #         img_array = np.array(img) / 255.0
+    #
+    #         # Convert to PyTorch tensor and rearrange dimensions (H, W, C) → (C, H, W)
+    #         img_tensor = torch.FloatTensor(img_array).permute(2, 0, 1)
+    #
+    #         # Determine if clouds should be added based on probability
+    #         if np.random.random() < self.cloud_probability:
+    #
+    #             # Add clouds and shadows using the satellite_cloud_generator library
+    #             cl, cmask, smask = scg.add_cloud_and_shadow(
+    #                 img_tensor,
+    #                 min_lvl=self.min_lvl,
+    #                 max_lvl=self.max_lvl,
+    #                 locality_degree=self.locality_degree,
+    #                 cloud_color=False,
+    #                 channel_offset=self.channel_offset,
+    #                 blur_scaling=self.blur_scaling,
+    #                 return_cloud=True,
+    #                 const_scale=True,
+    #                 noise_type='perlin',
+    #                 shadow_max_lvl=self.shadow_max_lvl
+    #             )
+    #
+    #         else:
+    #             # # No clouds - return the original image with empty masks
+    #             # cl = img_tensor
+    #             # cmask = torch.zeros_like(img_tensor[0:1])  # Single-channel mask
+    #             # smask = torch.zeros_like(img_tensor[0:1]) if self.shadow_max_lvl > 0 else None
+    #             continue
+    #
+    #         # cloud_dataset.append((cl, cmask, smask))
+    #         cloud_dataset.append(cl)
+    #         print(cl)
+    #
+    #     return cl
+
+    def generate_clouds(self, img):
         """
-        Generate clouds over a list of RGB satellite images.
+        Generate clouds over a single RGB satellite image.
 
         Args:
-            dataset (list): List or iterable of images (e.g., numpy arrays or PIL images).
+            img: A single image (e.g., a NumPy array or PIL image).
 
         Returns:
-            list: A list of tuples [(clouded_img, cloud_mask, shadow_mask), ...].
+            tuple: (clouded_img, cloud_mask, shadow_mask) or None if no cloud was added.
         """
-        cloud_dataset = []
+        # Convert image to numpy array and normalize
+        img_array = np.array(img) / 255.0
 
-        # Iterate over the dataset and generate clouds per image
-        for img in tqdm(dataset, desc="Generating clouds"):
-            # Convert image to numpy array and normalize
-            img_array = np.array(img) / 255.0
+        # Convert to PyTorch tensor and rearrange dimensions (H, W, C) → (C, H, W)
+        img_tensor = torch.FloatTensor(img_array).permute(2, 0, 1)
 
-            # Convert to PyTorch tensor and rearrange dimensions (H, W, C) → (C, H, W)
-            img_tensor = torch.FloatTensor(img_array).permute(2, 0, 1)
-
+        # Determine if clouds should be added based on probability
+        if np.random.random() < self.cloud_probability:
             # Add clouds and shadows using the satellite_cloud_generator library
             cl, cmask, smask = scg.add_cloud_and_shadow(
                 img_tensor,
@@ -65,9 +120,10 @@ class CloudGenerator:
                 noise_type='perlin',
                 shadow_max_lvl=self.shadow_max_lvl
             )
-            cloud_dataset.append((cl, cmask, smask))
-
-        return cloud_dataset
+            return cl.squeeze(0).permute(1,2,0).detach().cpu().numpy(), cmask, smask
+        else:
+            # No clouds - return None or original with empty masks, based on your design preference
+            return None
 
     def plot_results(self, dataset, results):
         """
@@ -105,6 +161,94 @@ class CloudGenerator:
 
             plt.show()
 
+    def save_data(self, img, original_filename, output_dir, copy_dir):
+        """
+        Save a single clouded image and its corresponding annotation.
+
+        Args:
+            img (np.array): The clouded image.
+            original_filename (str): The original image filename (e.g., "image1.png").
+            output_dir (str): Path where the clouded image and annotation will be saved.
+            copy_dir (str): Path to the original annotation files.
+
+        Returns:
+            self
+        """
+
+        # Define output subdirectories
+        images_dir = os.path.join(output_dir, "3_cloud_generation")
+        annotations_dir = os.path.join(output_dir, "3_cloud_annotation")
+
+        # Ensure directories exist
+        os.makedirs(images_dir, exist_ok=True)
+        os.makedirs(annotations_dir, exist_ok=True)
+
+        # Strip extension and build new filenames
+        base, _ = os.path.splitext(original_filename)
+
+        # Save clouded image
+        image_filename = base + "_cloud.png"
+        image_path = os.path.join(images_dir, image_filename)
+        plt.imsave(image_path, img)
+
+        # # Copy corresponding annotation
+        # annotation_filename = base + "_cloud.json"
+        # source_annotation_path = os.path.join(copy_dir, base + ".json")
+        # target_annotation_path = os.path.join(annotations_dir, annotation_filename)
+        #
+        # print(f"{annotation_filename}")
+        # print(f"{source_annotation_path}")
+        #
+        # if os.path.exists(source_annotation_path):
+        #     shutil.copy2(source_annotation_path, target_annotation_path)
+        # else:
+        #     print(f"Warning: Annotation file {annotation_filename} not found in {copy_dir}")
+
+        return self
+
+    # def save_data(self, image_dataset, input_dir, output_dir, copy_dir):
+    #     """
+    #     Save images and their corresponding annotations after cloud insertion.
+    #
+    #     Args:
+    #         image_dataset (List[np.array]): List of clouded images.
+    #         input_dir (str): Path to the original image directory.
+    #         output_dir (str): Path where clouded images and annotations will be saved.
+    #         copy_dir (str): Path to the original annotation files.
+    #
+    #     Returns:
+    #         self
+    #     """
+    #
+    #     # Define output subdirectories
+    #     images_dir = os.path.join(output_dir, "3_cloud_generation")
+    #     annotations_dir = os.path.join(output_dir, "3_cloud_annotation")
+    #     filenames = os.listdir(input_dir)
+    #
+    #     os.makedirs(images_dir, exist_ok=True)
+    #     os.makedirs(annotations_dir, exist_ok=True)
+    #
+    #     # Iterate over each image and its original filename
+    #     for img, filename in tqdm(zip(image_dataset, filenames), total=len(filenames), desc="Saving images"):
+    #         base, _ = os.path.splitext(filename)
+    #
+    #         # Save clouded image
+    #         image_filename = base + "_cloud.png"
+    #         image_path = os.path.join(images_dir, image_filename)
+    #         plt.imsave(image_path, img)
+    #
+    #         # Copy corresponding annotation
+    #         annotation_filename = base + "_cloud.json"
+    #         source_annotation_path = os.path.join(copy_dir, base + ".json")
+    #         target_annotation_path = os.path.join(annotations_dir, annotation_filename)
+    #
+    #         if os.path.exists(source_annotation_path):
+    #             shutil.copy2(source_annotation_path, target_annotation_path)
+    #         else:
+    #             print(f"Warning: Annotation file {annotation_filename} not found in {copy_dir}")
+    #
+    #     return self
+
     @staticmethod
     def _imshow(tensor, *args, **kwargs):
         """
@@ -117,12 +261,31 @@ class CloudGenerator:
         plt.axis('off')
 
 if __name__ == "__main__":
+    import os
+    from PIL import Image
+    import numpy as np
+
+
+    def load_images_from_folder(folder_path):
+        images = []
+        for file_name in tqdm(os.listdir(folder_path)):
+            file_path = os.path.join(folder_path, file_name)
+            try:
+                img = Image.open(file_path).convert("RGB")
+                images.append(img)
+            except Exception as e:
+                print(f"Error loading image {file_name}: {e}")
+        return images
+
+
     cloud_generator = CloudGenerator()
 
-    # Generate clouds for a sample dataset
-    dataset = [...]  # Replace with your dataset (list of numpy arrays or PIL images)
+    # Folder path with images
+    folder_path = "E:\Datasets\masati-thesis\synthetic_images/2_augmentation/c0001_aug0.png"
+    dataset = cv2.imread(folder_path)
+
+    # Generate clouds
     results = cloud_generator.generate_clouds(dataset)
-
-    # Plot the results
-    cloud_generator.plot_results(dataset, results)
-
+    print(results)
+    plt.imshow(results)
+    print("Cloud generation completed.")

@@ -110,7 +110,7 @@ class DatasetCreator:
             logger.info(f"Found {len(self._vae_files)} VAE-generated images")
         return self._vae_files
 
-    def create_dataset_1(self, output_dir=None):
+    def create_dataset_1(self, output_dir=None, total_images=None):
         """
         Create dataset 1: Images from original directory only.
 
@@ -126,14 +126,15 @@ class DatasetCreator:
             output_dir = Path(output_dir)
 
         orig_files = self.get_original_files()
+        sampled_files = random.sample(orig_files, total_images) if total_images is not None else orig_files
 
-        logger.info(f"Creating Dataset 1 with {len(orig_files)} original files")
+        logger.info(f"Creating Dataset 1 with {len(sampled_files)} original files")
         source_dir = self.original_dir
-        self._copy_files_to_dataset(orig_files, source_dir, output_dir)
+        self._copy_files_to_dataset(sampled_files, source_dir, output_dir)
 
         return output_dir
 
-    def create_dataset_2(self, output_dir=None):
+    def create_dataset_2(self, output_dir=None, total_images=None):
         """
         Create dataset 2: Images not in original directory.
 
@@ -149,10 +150,11 @@ class DatasetCreator:
             output_dir = Path(output_dir)
 
         non_orig_files = self.get_non_original_files()
+        sampled_files = random.sample(non_orig_files, total_images) if total_images is not None else non_orig_files
 
-        logger.info(f"Creating Dataset 2 with {len(non_orig_files)} non-original files")
+        logger.info(f"Creating Dataset 2 with {len(sampled_files)} non-original files")
         source_dir = self.secondary_dir
-        self._copy_files_to_dataset(non_orig_files, source_dir, output_dir)
+        self._copy_files_to_dataset(sampled_files, source_dir, output_dir)
 
         return output_dir
 
@@ -260,7 +262,7 @@ class DatasetCreator:
 
         return output_dir
 
-    def create_all_datasets(self, total_images=None):
+    def create_all_datasets(self, total_images=None, seed=None):
         """
         Create all four datasets.
 
@@ -271,11 +273,15 @@ class DatasetCreator:
         Returns:
             dict: Dictionary of dataset paths
         """
+        if seed is not None:
+            random.seed(seed)
+            np.random.seed(seed)
+
         datasets = {
-            "dataset1": self.create_dataset_1(),
-            "dataset2": self.create_dataset_2(),
-            "dataset3": self.create_dataset_3(total_images=total_images),
-            "dataset4": self.create_dataset_4(total_images=total_images)
+            "dataset1": self.create_dataset_1(total_images),
+            "dataset2": self.create_dataset_2(total_images),
+            "dataset3": self.create_dataset_3(total_images),
+            "dataset4": self.create_dataset_4(total_images)
         }
 
         logger.info("All datasets created successfully")
@@ -324,7 +330,7 @@ def main():
     )
 
     # Create all datasets with 1000 images each
-    datasets = creator.create_all_datasets(total_images=1000)
+    datasets = creator.create_all_datasets(total_images=1000, seed=89)
 
     # Or create individual datasets with custom parameters
     # dataset1 = creator.create_dataset_1()
@@ -338,4 +344,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()  # %%
+    main()
