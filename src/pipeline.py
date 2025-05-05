@@ -1,8 +1,4 @@
 import os
-import random
-import shutil
-import json
-import cv2
 from tqdm import tqdm
 from object_insertion import ObjectInsertion
 from basic_augmentation import BasicAugmentation
@@ -207,34 +203,14 @@ class ImageGenerationPipeline:
             cloud_probability=self.params["cloud_probability"],
         )
 
-        # Extract all files to sample from for cloud generation
-        # image_lst = self._extract_files()
-        # image_lst = random.sample(image_lst, 5000)
-        # image_dataset = [
-        #     cv2.imread(f, cv2.IMREAD_COLOR)
-        #     for f in tqdm(image_lst)
-        # ]
-
-        # # Apply cloud generation to each image
-        # clouded_images = self.cloud_gen.generate_clouds(list(self.tracker["images"].values()))
-        # #cl_values, _, _ = zip(*clouded_images)
-        #
-        # # Save the generated images with clouds and annotations
-        # self.cloud_gen.save_data(clouded_images, self.augmentation_output,
-        #                          self.params["output_dir"], self.augmentation_annotation_output)
-
-        # Apply cloud generation to each image and save immediately to save memory
-        print("Generating clouds for images...")
-
         # Process and save images one by one with their filenames
         for filename, image in tqdm(self.tracker["images"].items(), desc="Processing images"):
             result = self.cloud_gen.generate_clouds(image)
+            annotations = self.tracker["annotations"][filename]
 
             if result is not None:
                 cl, _, _ = result  # Clouded image, cloud mask, shadow mask
-                self.cloud_gen.save_data(cl, filename,
-                                                 self.params["output_dir"],
-                                                 self.augmentation_annotation_output)
+                self.cloud_gen.save_data(cl, filename, annotations, self.params["output_dir"])
 
         print(f"Cloud generation complete. Final images saved to {self.cloud_generation_output}")
 
@@ -242,18 +218,6 @@ class ImageGenerationPipeline:
         self.print_parameters(save_path=os.path.join(self.params["output_dir"], "parameters.txt"))
 
         return self.cloud_generation_output
-
-    # def _extract_files(self):
-    #     """Extract all image files from the output directory"""
-    #
-    #     # Gather all images file paths from directories
-    #     image_lst = list()
-    #     for root, dirs, files in tqdm(os.walk(self.params["output_dir"])):
-    #         for file in files:
-    #             if file.endswith(('.jpg', '.png', '.jpeg')):
-    #                 image_lst.append(os.path.join(root, file))
-    #
-    #     return image_lst
 
 
     def print_parameters(self, save_path=None):
