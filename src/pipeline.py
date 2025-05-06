@@ -96,8 +96,8 @@ class ImageGenerationPipeline:
             # Basic Augmentation
             "aug_probability": aug_probability,
             "n_augmentations": n_augmentations,
-            "huesat_values":{"hue_shift_limit": 10, "sat_shift_limit": 15, "val_shift_limit": 10},
-            "gauss_noise_std": (0.1, 0.25),
+            "huesat_values":{"hue_shift_limit": 8, "sat_shift_limit": 10, "val_shift_limit": 8},
+            "gauss_noise_std": (0.05, 0.15),
             "gauss_noise_mean": (0,0),
 
             # Cloud Generator
@@ -259,18 +259,18 @@ if __name__ == "__main__":
         obj_dir="E:/Datasets/MasatiV2/MasatiV2Boats",
         xml_dir="E:/Datasets/masati-thesis/annotations",
         output_dir="E:/Datasets/masati-thesis/synthetic_images",
-        seed=89,
+        seed=1583891,
         input_size=(512, 512),
-        target_size=(256, 256),
+        target_size=(480, 480),
         max_iter=100,
         margin=10,
-        max_insert=1,
+        max_insert=2,
         sample_method='selective',
         replacement=True,
 
         # Basic Augmentation parameters
         aug_probability=0.5,
-        n_augmentations=1,
+        n_augmentations=3,
 
         # Cloud Generator parameters
         min_cloud_intensity=0,
@@ -279,7 +279,7 @@ if __name__ == "__main__":
         blur_scaling=0,
         channel_offset=0,
         max_shadow_intensity=0.25,
-        cloud_probability=0.2,
+        cloud_probability=0.25,
     )
 
     output_path = pipeline.run()

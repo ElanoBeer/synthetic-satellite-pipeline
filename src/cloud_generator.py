@@ -139,14 +139,14 @@ class CloudGenerator:
         # Save clouded image
         image_filename = base + "_cloud.png"
         image_path = os.path.join(images_dir, image_filename)
-        plt.imsave(image_path, img)
+        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        plt.imsave(image_path, img_rgb)
 
         # Save annotation as JSON
         annotation_filename = base + "_cloud.json"
-        annotation_data = {"boxes": annotations}
         annotation_path = os.path.join(annotations_dir, annotation_filename)
         with open(annotation_path, "w") as f:
-            json.dump(annotation_data, f)
+            json.dump(annotations, f)
 
     @staticmethod
     def _imshow(tensor, *args, **kwargs):
