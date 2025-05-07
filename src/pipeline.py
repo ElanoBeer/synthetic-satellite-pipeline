@@ -96,7 +96,7 @@ class ImageGenerationPipeline:
             # Basic Augmentation
             "aug_probability": aug_probability,
             "n_augmentations": n_augmentations,
-            "huesat_values":{"hue_shift_limit": 8, "sat_shift_limit": 10, "val_shift_limit": 8},
+            "huesatval_lim":{"hue_shift_limit": 8, "sat_shift_limit": 10, "val_shift_limit": 8},
             "gauss_noise_std": (0.05, 0.15),
             "gauss_noise_mean": (0,0),
 
@@ -233,7 +233,7 @@ class ImageGenerationPipeline:
             lines.append(f"  - {key}: {self.params[key]}")
 
         lines.append("\nAugmentation Parameters:")
-        for key in ["aug_probability", "n_augmentations", "huesat_values", "gauss_noise_std", "gauss_noise_mean"]:
+        for key in ["aug_probability", "n_augmentations", "huesatval_lim", "gauss_noise_std", "gauss_noise_mean"]:
             lines.append(f"  - {key}: {self.params[key]}")
 
         lines.append("\nCloud Generation Parameters:")

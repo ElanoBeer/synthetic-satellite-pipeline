@@ -6,7 +6,7 @@ from tqdm import tqdm
 
 
 class BasicAugmentation:
-    def __init__(self, img_dir, json_dir, output_dir, input_size, target_size, p=0.5, n_augmentations=1):
+    def __init__(self, img_dir, json_dir, output_dir, input_size, target_size, huesatval = None, std_range=tuple(0.05, 0.15), p=0.5, n_augmentations=1):
         """
         Initialize the basic augmentation pipeline.
         This pipeline utilizes albumentations to perform geometric and
@@ -22,6 +22,8 @@ class BasicAugmentation:
         self.output_dir = output_dir
         self.input_size = input_size
         self.target_size = target_size
+        self.huesatval = huesatval
+        self.std_range = std_range
         self.p = p
         self.n_augmentations = n_augmentations
 
@@ -40,11 +42,11 @@ class BasicAugmentation:
             A.VerticalFlip(p=p),
             A.RandomCrop(height=self.target_size[0], width=self.target_size[1], p=p),
             A.RandomBrightnessContrast(p=p),
-            A.HueSaturationValue(hue_shift_limit=10,       # default is 20
-                                sat_shift_limit=15,       # default is 30
-                                val_shift_limit=10,       # default is 20
+            A.HueSaturationValue(hue_shift_limit=self.huesatval[0],       # default is 20
+                                sat_shift_limit=self.huesatval[1],       # default is 30
+                                val_shift_limit=self.huesatval[2],       # default is 20
                                 p=p),
-            A.GaussNoise(std_range=(0.1, 0.25), mean_range=(0,0), p=p)
+            A.GaussNoise(std_range=self.std_range, mean_range=(0,0), p=p)
         ],
             bbox_params=A.BboxParams(format='pascal_voc', label_fields=["class_labels"]))
 
@@ -269,6 +271,8 @@ if __name__ == "__main__":
         output_dir=output_dir,
         input_size=(512, 512),
         target_size=(512, 512),
+        huesatval = [10, 10, 10],
+        std_range=(0.05, 0.15),
         p=0.5,
         n_augmentations=7,
     )

@@ -167,6 +167,10 @@ class ObjectInsertion:
         images_dir = os.path.join(self.out_dir, "1_object_insertion")
         annotations_dir = os.path.join(self.out_dir, "1_object_annotation")
 
+        # Create the directories if not present
+        os.makedirs(images_dir, exist_ok=True)
+        os.makedirs(annotations_dir, exist_ok=True)
+
         # Define file name
         base, _ = os.path.splitext(img)
         image_filename = base + "_" + f"{img_id}.png"
@@ -177,21 +181,6 @@ class ObjectInsertion:
         clone_rgb = cv2.cvtColor(clone, cv2.COLOR_BGR2RGB)
         self.dataset["images"][image_filename] = clone_rgb
         cv2.imwrite(image_path, clone_rgb)
-
-        # # Save annotation as JSON
-        # boxes, classes = self.annotations[img][0], self.annotations[img][1]
-        # annotations = boxes + new_boxes
-        # annotation_data = {"boxes": annotations, "classes": classes}
-        # annotation_path = os.path.join(annotations_dir, annotation_filename)
-        # with open(annotation_path, "w") as f:
-        #     json.dump(annotation_data, f)
-
-        # # Check if annotations for this image exist
-        # if img in self.annotations:
-        #     boxes, classes = self.annotations[img]
-        # else:
-        #     # If no annotations exist, initialize empty lists for boxes and classes
-        #     boxes, classes = [], []
 
         boxes, classes = self.annotations[img]
 
@@ -607,7 +596,7 @@ class ObjectInsertion:
             inserted[top_left_y:top_left_y + src_h, top_left_x:top_left_x + src_w] = roi
 
             # Calculate the bounding box (top-left and bottom-right corners)
-            bbox = [[int(top_left_y), int(top_left_x), int(top_left_y + src_h), int(top_left_x + src_w)]]
+            bbox = [[int(top_left_x), int(top_left_y), int(top_left_x + src_w), int(top_left_y + src_h)]]
 
             # Store the data, passing the filename
             self.save_data(filename, inserted, bbox, "1")
