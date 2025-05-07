@@ -32,6 +32,8 @@ class ImageGenerationPipeline:
                  replacement=True,
 
                  # Basic Augmentation parameters
+                 huesatval=None,
+                 std_range=(0.05, 0.15),
                  aug_probability=0.5,
                  n_augmentations=7,
 
@@ -96,8 +98,8 @@ class ImageGenerationPipeline:
             # Basic Augmentation
             "aug_probability": aug_probability,
             "n_augmentations": n_augmentations,
-            "huesatval_lim":{"hue_shift_limit": 8, "sat_shift_limit": 10, "val_shift_limit": 8},
-            "gauss_noise_std": (0.05, 0.15),
+            "huesatval_lim": huesatval,
+            "gauss_noise_std": std_range,
             "gauss_noise_mean": (0,0),
 
             # Cloud Generator
@@ -177,6 +179,8 @@ class ImageGenerationPipeline:
             output_dir=self.params["output_dir"],
             input_size=self.params["input_size"],
             target_size=self.params["target_size"],
+            huesatval=self.params["huesatval_lim"],
+            std_range=self.params["gauss_noise_std"],
             p=self.params["aug_probability"],
             n_augmentations=self.params["n_augmentations"]
         )
@@ -269,6 +273,7 @@ if __name__ == "__main__":
         replacement=True,
 
         # Basic Augmentation parameters
+        huesatval={"hue_shift_limit": 10, "sat_shift_limit": 10, "val_shift_limit": 10},
         aug_probability=0.5,
         n_augmentations=3,
 
