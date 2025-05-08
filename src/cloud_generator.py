@@ -139,8 +139,8 @@ class CloudGenerator:
         # Save clouded image
         image_filename = base + "_cloud.png"
         image_path = os.path.join(images_dir, image_filename)
-        img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-        plt.imsave(image_path, img_rgb)
+        #img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+        plt.imsave(image_path, img)
 
         # Save annotation as JSON
         annotation_filename = base + "_cloud.json"

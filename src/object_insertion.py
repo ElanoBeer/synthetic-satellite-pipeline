@@ -178,8 +178,8 @@ class ObjectInsertion:
 
         # Save image
         image_path = os.path.join(images_dir, image_filename)
+        self.dataset["images"][image_filename] = clone
         clone_rgb = cv2.cvtColor(clone, cv2.COLOR_BGR2RGB)
-        self.dataset["images"][image_filename] = clone_rgb
         cv2.imwrite(image_path, clone_rgb)
 
         boxes, classes = self.annotations[img]
@@ -350,7 +350,7 @@ class ObjectInsertion:
         """
         for file, obj in self.objects.items():
             # Convert the object image to a binary mask
-            gray_obj = cv2.cvtColor(obj, cv2.COLOR_BGR2GRAY)
+            gray_obj = cv2.cvtColor(obj, cv2.COLOR_RGB2GRAY)
 
             # Apply Gaussian blur to reduce the noise
             blur_mask = cv2.GaussianBlur(gray_obj, (5, 5), 0)
@@ -451,8 +451,8 @@ class ObjectInsertion:
             float: The SSIM score (ranges from -1 to 1, where 1 means identical images).
         """
         # Convert images to grayscale
-        image1_gray = cv2.cvtColor(image1, cv2.COLOR_BGR2GRAY)
-        image2_gray = cv2.cvtColor(image2, cv2.COLOR_BGR2GRAY)
+        image1_gray = cv2.cvtColor(image1, cv2.COLOR_RGB2GRAY)
+        image2_gray = cv2.cvtColor(image2, cv2.COLOR_RGB2GRAY)
 
         # Calculate SSIM
         ssim_score = metrics.structural_similarity(image1_gray, image2_gray)

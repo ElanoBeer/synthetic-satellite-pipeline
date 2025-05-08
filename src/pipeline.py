@@ -273,7 +273,8 @@ if __name__ == "__main__":
         replacement=True,
 
         # Basic Augmentation parameters
-        huesatval={"hue_shift_limit": 10, "sat_shift_limit": 10, "val_shift_limit": 10},
+        huesatval={"hue_shift_limit": (-10, 10), "sat_shift_limit": (-10, 10), "val_shift_limit": (-10, 10)},
+        std_range=(0.05, 0.15),
         aug_probability=0.5,
         n_augmentations=3,
 

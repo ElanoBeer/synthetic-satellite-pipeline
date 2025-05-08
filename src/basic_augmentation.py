@@ -102,6 +102,9 @@ class BasicAugmentation:
         # Load image using OpenCV
         img = cv2.imread(img_path)
 
+        # Convert BGR to RGB
+        img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
         # Resize image
         resized = cv2.resize(img, self.target_size, interpolation=cv2.INTER_LANCZOS4)
 
@@ -195,8 +198,8 @@ class BasicAugmentation:
 
         # Save image
         image_path = os.path.join(images_dir, image_filename)
+        self.dataset["images"][image_filename] = augmented_img
         augmented_rgb = cv2.cvtColor(augmented_img, cv2.COLOR_BGR2RGB)
-        self.dataset["images"][image_filename] = augmented_rgb
         cv2.imwrite(image_path, augmented_rgb)
 
         # Save annotation as JSON
@@ -268,7 +271,7 @@ if __name__ == "__main__":
         output_dir=output_dir,
         input_size=(512, 512),
         target_size=(512, 512),
-        huesatval = [10, 10, 10],
+        huesatval = {"hue_shift_limit": 10, "sat_shift_limit": 10, "val_shift_limit": 10},
         std_range=(0.05, 0.15),
         p=0.5,
         n_augmentations=7,
