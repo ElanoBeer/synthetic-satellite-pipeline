@@ -22,10 +22,12 @@ class DatasetCreator:
     2. Non-original images only
     3. Random mix of original and non-original images
     4. Mix with specific percentage of VAE-generated images
+
+    For each image, corresponding JSON annotation files will also be copied if available.
     """
 
     def __init__(self, original_dir, insertion_dir, augmentation_dir, cloud_dir, vae_dir,
-                 output_base_dir, sample_weights=None, seed=None):
+                 output_base_dir, sample_weights=None, seed=None, copy_annotations=True):
         """
         Initialize the DatasetCreator with directory paths.
 
@@ -38,6 +40,7 @@ class DatasetCreator:
             output_base_dir (str): Base directory for output datasets
             sample_weights (list): Weights for sampling from non-original dirs [insertion, augmentation, cloud]
             seed (int): Random seed for reproducibility
+            copy_annotations (bool): Whether to copy annotation files along with images
         """
         self.original_dir = Path(original_dir)
         self.insertion_dir = Path(insertion_dir)
@@ -46,6 +49,17 @@ class DatasetCreator:
         self.vae_dir = Path(vae_dir)
         self.output_base_dir = Path(output_base_dir)
         self.non_original_dirs = [self.insertion_dir, self.augmentation_dir, self.cloud_dir]
+        self.copy_annotations = copy_annotations
+
+        # Map image directories to their corresponding annotation directories
+        root_dir = self.original_dir.parent
+        self.annotation_dirs = {
+            str(self.original_dir): root_dir / f"0_original_annotation",
+            str(self.insertion_dir): root_dir / f"1_object_annotation",
+            str(self.augmentation_dir): root_dir / f"2_augmentation_annotation",
+            str(self.cloud_dir): root_dir / f"3_cloud_annotation",
+            str(self.vae_dir): root_dir / f"4_vae_annotation"
+        }
 
         # Default weights if none provided
         if sample_weights is None:
@@ -96,6 +110,13 @@ class DatasetCreator:
         ]:
             if not dir_path.exists():
                 raise FileNotFoundError(f"{dir_name} directory not found: {dir_path}")
+
+        # Check annotation directories if enabled
+        if self.copy_annotations:
+            for img_dir, anno_dir in self.annotation_dirs.items():
+                if not anno_dir.exists():
+                    logger.warning(
+                        f"Annotation directory not found: {anno_dir}. Will skip copying annotations for {Path(img_dir).name}.")
 
         # Create output base directory if it doesn't exist
         if not self.output_base_dir.exists():
@@ -412,6 +433,7 @@ class DatasetCreator:
     def _copy_files_to_dataset(self, filenames, source_dir, target_dir):
         """
         Copy files from source directory to target directory.
+        Also copy corresponding annotation files if available.
 
         Args:
             filenames (list): List of filenames to copy
@@ -421,9 +443,17 @@ class DatasetCreator:
         # Create target directory if it doesn't exist
         target_dir.mkdir(parents=True, exist_ok=True)
 
+        # Create annotation directory if needed
+        if self.copy_annotations:
+            target_anno_dir = target_dir / "annotations"
+            target_anno_dir.mkdir(parents=True, exist_ok=True)
+
         # Copy files
         successful_copies = 0
+        successful_anno_copies = 0
+
         for filename in filenames:
+            # Copy image file
             source_file = source_dir / filename
             target_file = target_dir / filename
 
@@ -432,8 +462,27 @@ class DatasetCreator:
                 successful_copies += 1
             else:
                 logger.warning(f"Source file not found: {source_file}")
+                continue
+
+            # Copy annotation file if enabled
+            if self.copy_annotations:
+                # Get annotation directory for this source directory
+                anno_dir = self.annotation_dirs.get(str(source_dir))
+                if anno_dir and anno_dir.exists():
+                    # Get base filename without extension and look for json file
+                    base_name = Path(filename).stem
+                    anno_file = anno_dir / f"{base_name}.json"
+
+                    if anno_file.exists():
+                        target_anno_file = target_anno_dir / f"{base_name}.json"
+                        shutil.copy2(anno_file, target_anno_file)
+                        successful_anno_copies += 1
+                    else:
+                        logger.debug(f"Annotation file not found: {anno_file}")
 
         logger.info(f"Copied {successful_copies} files from {source_dir.name} to {target_dir}")
+        if self.copy_annotations:
+            logger.info(f"Copied {successful_anno_copies} annotation files for {source_dir.name}")
 
 
 def main():
@@ -457,14 +506,18 @@ def main():
         vae_dir=vae_dir,
         output_base_dir=output_dir,
         sample_weights=[0.6, 0.25, 0.15],
-        seed=1583891
+        seed=1583891,
+        copy_annotations=True  # Enable copying of annotation files
     )
 
+    # Create all datasets with 1000 images each
+    # datasets = creator.create_all_datasets(total_images=1000)
+
     # Or create individual datasets with custom parameters
-    creator.create_dataset_1(total_images=4000)
-    creator.create_dataset_2(total_images=8000)
-    creator.create_dataset_3(ratio=0.4, total_images=12000)
-    creator.create_dataset_4(vae_percentage=0.3, orig_ratio=0.6, total_images=16000)
+    # creator.create_dataset_1(total_images=1000)
+    # creator.create_dataset_2(total_images=800)
+    creator.create_dataset_3(ratio=0.5, total_images=10000)
+    # creator.create_dataset_4(vae_percentage=0.3, orig_ratio=0.6, total_images=1200)
 
 
 if __name__ == "__main__":

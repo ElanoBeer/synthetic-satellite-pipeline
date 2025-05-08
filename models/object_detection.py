@@ -428,9 +428,9 @@ class VesselDetection:
 # Example usage
 if __name__ == "__main__":
     # Parameters
-    IMAGES_DIR = "E:\Datasets\masati-thesis\clones"  # Update with your image directory
-    ANNOTATIONS_DIR = "E:\Datasets\masati-thesis\clone_annotations"  # Update with your annotations file
-    OUTPUT_DIR = "E:/Datasets/masati-thesis/vessel_detection_output"
+    IMAGES_DIR = r"E:\Datasets\masati-thesis\synthetic_images\0_original_images"  # Update with your image directory
+    ANNOTATIONS_DIR = r"E:\Datasets\masati-thesis\synthetic_images\0_original_annotation"  # Update with your annotations file
+    OUTPUT_DIR = "E:/Datasets/masati-thesis/vessel_detection_output_0"
     MODEL_DIR = "/models/yolov8n.pt"
     N_FOLDS = 5  # Number of cross-validation folds
     EPOCHS = 50  # Training epochs per fold

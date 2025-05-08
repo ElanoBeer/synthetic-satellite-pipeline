@@ -2,47 +2,53 @@ import os
 import json
 
 
-def aggregate_annotations(input_dir, output_file):
+def aggregate_annotations(input_dirs, output_file):
     """
-    Convert a directory of JSON files with PASCAL VOC format to a single JSON file
+    Convert multiple directories of JSON files with PASCAL VOC format to a single JSON file
     with simplified format.
 
     Args:
-        input_dir (str): Directory containing JSON files with PASCAL VOC annotations
+        input_dirs (list): List of directories containing JSON files with PASCAL VOC annotations
         output_file (str): Path to output file
     """
     # Dictionary to store all annotations
     consolidated_annotations = {}
 
-    # Get all JSON files in the input directory
-    json_files = [f for f in os.listdir(input_dir) if f.endswith('.json')]
+    total_files_processed = 0
 
-    print(f"Found {len(json_files)} JSON files in {input_dir}")
+    # Process each input directory
+    for input_dir in input_dirs:
+        # Get all JSON files in the current input directory
+        json_files = [f for f in os.listdir(input_dir) if f.endswith('.json')]
 
-    # Process each JSON file
-    for json_file in json_files:
-        json_path = os.path.join(input_dir, json_file)
+        print(f"Found {len(json_files)} JSON files in {input_dir}")
 
-        with open(json_path, 'r') as f:
-            annotation_data = json.load(f)
+        # Process each JSON file
+        for json_file in json_files:
+            json_path = os.path.join(input_dir, json_file)
 
-        # Extract the bboxes and filename
-        image_filename = os.path.splitext(json_file)[0] + ".png"
-        bboxes = annotation_data["boxes"]
+            with open(json_path, 'r') as f:
+                annotation_data = json.load(f)
 
-        # Add to consolidated annotations
-        if bboxes:
-            consolidated_annotations[image_filename] = {"bboxes": bboxes}
-            print(f"Processed {json_file} - Found {len(bboxes)} bboxes for {image_filename}")
-        else:
-            print(f"Warning: No bounding boxes found in {json_file}")
+            # Extract the bboxes and filename
+            image_filename = os.path.splitext(json_file)[0] + ".png"
+            bboxes = annotation_data["boxes"]
 
+            # Add to consolidated annotations
+            if bboxes:
+                consolidated_annotations[image_filename] = {"bboxes": bboxes}
+                print(f"Processed {json_file} - Found {len(bboxes)} bboxes for {image_filename}")
+            else:
+                print(f"Warning: No bounding boxes found in {json_file}")
+
+            total_files_processed += 1
 
     # Write the consolidated annotations to output file
     with open(output_file, 'w') as f:
         json.dump(consolidated_annotations, f, indent=2)
 
-    print(f"Successfully converted {len(consolidated_annotations)} annotations to {output_file}")
+    print(
+        f"Successfully aggregated {len(consolidated_annotations)} annotations from {total_files_processed} files to {output_file}")
     return consolidated_annotations
 
 
