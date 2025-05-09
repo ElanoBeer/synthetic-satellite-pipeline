@@ -6,6 +6,9 @@ from torch.utils.data import DataLoader
 import os
 from PIL import Image
 from tqdm import tqdm
+import matplotlib.pyplot as plt
+import numpy as np
+import time
 
 # --- Settings ---
 img_size = 480  # Updated from 224 to 480
@@ -48,7 +51,6 @@ class ImageDataset(torch.utils.data.Dataset):
         return img
 
 
-# Replace with your image folder paths (multiple directories)
 image_dirs = [
     r"E:/Datasets/masati-thesis/synthetic_images/0_original_images",
     r"E:/Datasets/masati-thesis/synthetic_images/1_object_insertion",
@@ -126,10 +128,21 @@ if __name__ == "__main__":
     optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 
     # --- Training Loop ---
-    for epoch in tqdm(range(epochs)):
+    # For tracking and visualizing loss
+    epoch_losses = []
+    batch_losses = []
+    start_time = time.time()
+    log_interval = 10  # Log every 10 batches
+
+    for epoch in range(epochs):
         model.train()
         total_loss = 0
-        for imgs in dataloader:
+        epoch_start = time.time()
+
+        progress_bar = tqdm(enumerate(dataloader), total=len(dataloader),
+                            desc=f"Epoch {epoch + 1}/{epochs}")
+
+        for batch_idx, imgs in progress_bar:
             imgs = imgs.to(device)
             recon, mu, logvar = model(imgs)
             loss = vae_loss(imgs, recon, mu, logvar)
@@ -138,10 +151,63 @@ if __name__ == "__main__":
             loss.backward()
             optimizer.step()
 
+            batch_loss = loss.item() / len(imgs)
             total_loss += loss.item()
 
-        print(f"[Epoch {epoch + 1}/{epochs}] Loss: {total_loss / len(dataset):.4f}")
+            # Track batch loss
+            batch_losses.append(batch_loss)
 
-    # --- Save the Model ---
+            # Update progress bar with current batch loss
+            progress_bar.set_postfix({
+                'batch_loss': f'{batch_loss:.4f}',
+                'avg_loss': f'{total_loss / (batch_idx + 1) / batch_size:.4f}'
+            })
+
+            # Print more detailed updates at regular intervals
+            if (batch_idx + 1) % log_interval == 0:
+                elapsed = time.time() - start_time
+                print(f"\nBatch {batch_idx + 1}/{len(dataloader)} | "
+                      f"Loss: {batch_loss:.4f} | "
+                      f"Time: {elapsed:.2f}s")
+
+        # Calculate and store epoch loss
+        epoch_loss = total_loss / len(dataset)
+        epoch_losses.append(epoch_loss)
+        epoch_time = time.time() - epoch_start
+
+        print(f"[Epoch {epoch + 1}/{epochs}] "
+              f"Loss: {epoch_loss:.4f} | "
+              f"Time: {epoch_time:.2f}s")
+
+        # Optional: Save checkpoint every few epochs
+        if (epoch + 1) % 10 == 0:
+            torch.save(model.state_dict(), f"vae_model_480_epoch{epoch + 1}.pth")
+            print(f"Checkpoint saved at epoch {epoch + 1}")
+
+    # --- Save the Final Model ---
     torch.save(model.state_dict(), "vae_model_480.pth")
-    print("Model saved as 'vae_model_480.pth'")
+    print("Final model saved as 'vae_model_480.pth'")
+
+    # --- Visualize Loss ---
+    plt.figure(figsize=(12, 5))
+
+    # Plot epoch losses
+    plt.subplot(1, 2, 1)
+    plt.plot(range(1, epochs + 1), epoch_losses, 'b-')
+    plt.title('Training Loss per Epoch')
+    plt.xlabel('Epoch')
+    plt.ylabel('Loss')
+    plt.grid(True)
+
+    # Plot batch losses
+    plt.subplot(1, 2, 2)
+    plt.plot(batch_losses, 'r-')
+    plt.title('Training Loss per Batch')
+    plt.xlabel('Batch')
+    plt.ylabel('Loss')
+    plt.grid(True)
+
+    plt.tight_layout()
+    plt.savefig('vae_training_loss.png', dpi=300)
+    plt.show()
+    print("Loss visualization saved as 'vae_training_loss.png'")
