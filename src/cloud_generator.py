@@ -72,7 +72,7 @@ class CloudGenerator:
             return cl.squeeze(0).permute(1,2,0).detach().cpu().numpy(), cmask, smask
         else:
             # No clouds - return None or original with empty masks, based on your design preference
-            return None
+            return None, None, None
 
     def plot_results(self, dataset, results):
         """
@@ -163,6 +163,10 @@ if __name__ == "__main__":
     import os
     from PIL import Image
     import numpy as np
+    from tqdm import tqdm
+
+    np.random.seed(1583891)
+    torch.manual_seed(1583891)
 
 
     def load_images_from_folder(folder_path):
@@ -171,20 +175,74 @@ if __name__ == "__main__":
             file_path = os.path.join(folder_path, file_name)
             try:
                 img = Image.open(file_path).convert("RGB")
+                img.filename = file_name  # preserve filename manually
                 images.append(img)
             except Exception as e:
                 print(f"Error loading image {file_name}: {e}")
         return images
 
 
-    cloud_generator = CloudGenerator()
+    # Initialize the cloud generator
+    cloud_generator = CloudGenerator(
+        min_lvl=0,
+        max_lvl=0.8,
+        locality_degree=2,
+        blur_scaling=0,
+        channel_offset=0,
+        shadow_max_lvl=0.25,
+        cloud_probability=0.25)
 
-    # Folder path with images
-    folder_path = "E:\Datasets\masati-thesis\synthetic_images/2_augmentation/c0001_aug0.png"
-    dataset = cv2.imread(folder_path)
+    # Folder paths
+    input_folder = r"E:\Datasets\masati-thesis\synthetic_images\2_augmentation"
+    mask_output_folder = r"E:\Datasets\masati-thesis\synthetic_images\6_cloud_masks"
+    os.makedirs(mask_output_folder, exist_ok=True)
 
-    # Generate clouds
-    results = cloud_generator.generate_clouds(dataset)
-    print(results)
-    plt.imshow(results)
-    print("Cloud generation completed.")
+    # Load dataset
+    dataset = load_images_from_folder(input_folder)
+
+
+    def tensor_to_image(tensor):
+        if isinstance(tensor, torch.Tensor):
+            tensor = tensor.detach().cpu().numpy()
+
+        if isinstance(tensor, np.ndarray):
+            # Remove batch dimension if present
+            if tensor.ndim == 4 and tensor.shape[0] == 1:
+                tensor = tensor[0]  # (1, C, H, W) -> (C, H, W)
+
+            # Handle channel-first shapes
+            if tensor.ndim == 3:
+                if tensor.shape[0] == 1:  # (1, H, W)
+                    tensor = tensor[0]
+                elif tensor.shape[0] == 3:  # (3, H, W) → choose first channel
+                    tensor = tensor[0]
+                else:
+                    raise ValueError(f"Unexpected channel size in shape {tensor.shape}")
+
+            if tensor.ndim != 2:
+                raise ValueError(f"Expected 2D array for grayscale image, got shape {tensor.shape}")
+
+            # Normalize to uint8 if necessary
+            if tensor.dtype != np.uint8:
+                tensor = (tensor * 255).astype(np.uint8)
+
+            return Image.fromarray(tensor)
+
+        raise TypeError(f"Unsupported input type: {type(tensor)}")
+
+
+    # Inside your loop:
+    for img in tqdm(dataset):
+        results, cmask, smask = cloud_generator.generate_clouds(img)
+        if results is not None:
+            cmask_img = tensor_to_image(cmask)
+            smask_img = tensor_to_image(smask)
+            base_name = os.path.splitext(img.filename)[0]
+
+            cmask_img.save(os.path.join(mask_output_folder, f"{base_name}_cloud_mask.png"))
+            smask_img.save(os.path.join(mask_output_folder, f"{base_name}_shadow_mask.png"))
+
+        else:
+            continue
+
+    print("Cloud and shadow masks saved.")
