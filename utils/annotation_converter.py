@@ -120,8 +120,11 @@ class AnnotationConverter:
 
 def main():
     # Define your input and output paths directly in the code
-    input_dir = "E:/Datasets/masati-thesis/clone_annotations"  # Replace with your actual input directory path
-    output_file = "E:/Datasets/masati-thesis/agg_annotations.json"  # Replace with your desired output file path
+    input_dirs = [r'E:\Datasets\masati-thesis\synthetic_images\0_original_annotation',
+                  r'E:\Datasets\masati-thesis\synthetic_images\1_object_annotation',
+                  r'E:\Datasets\masati-thesis\synthetic_images\2_augmentation_annotation',
+                  r'E:\Datasets\masati-thesis\synthetic_images\3_cloud_annotation_copy']  # Replace with your actual input directory path
+    output_file = r"E:\Datasets\masati-thesis\synthetic_images\6_agg_annotations.json"  # Replace with your desired output file path
 
     # Create output directory if it doesn't exist
     output_dir = os.path.dirname(output_file)
@@ -129,7 +132,7 @@ def main():
         os.makedirs(output_dir)
 
     # Convert annotations
-    aggregate_annotations(input_dir, output_file)
+    aggregate_annotations(input_dirs, output_file)
 
 
 if __name__ == "__main__":

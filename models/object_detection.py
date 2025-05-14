@@ -433,7 +433,7 @@ if __name__ == "__main__":
     OUTPUT_DIR = "E:/Datasets/masati-thesis/vessel_detection_output_0"
     MODEL_DIR = "/models/yolov8n.pt"
     N_FOLDS = 5  # Number of cross-validation folds
-    EPOCHS = 50  # Training epochs per fold
+    EPOCHS = 10  # Training epochs per fold
 
     # Initialize and run pipeline
     detector = VesselDetection(

@@ -507,37 +507,52 @@ class ObjectInsertion:
 
     def copy_folder(self):
         """
-        Copies a folder from src to dst.
-
-        Parameters:
-            src (str): Source folder path.
-            dst (str): Destination folder path.
+        Copies a folder from src to dst, resizing images to the target size
+        and adjusting annotations accordingly.
 
         Returns:
-            None
+            self: For method chaining
         """
 
-        print(f"Copying folder from '{self.img_dir}' to '{self.out_dir}'...")
+        print(f"Processing original images from '{self.img_dir}' to '{self.out_dir}'...")
 
         # Define subdirectories for images and annotations
         copy_images_dir = os.path.join(self.out_dir, "0_original_images")
         copy_annotations_dir = os.path.join(self.out_dir, "0_original_annotation")
 
-        # Copy the images in the directory
-        shutil.copytree(self.img_dir, copy_images_dir, dirs_exist_ok=True)
+        # Create the directories if not present
+        os.makedirs(copy_images_dir, exist_ok=True)
         os.makedirs(copy_annotations_dir, exist_ok=True)
-        #shutil.copytree(self.xml_dir, copy_annotations_dir, dirs_exist_ok=True)
 
-        # Store the annotations as JSON files
-        for img in tqdm(self.annotations.keys()):
-            annotation_filename = f"{os.path.splitext(img)[0]}.json"
-            boxes, classes = self.annotations[img][0], self.annotations[img][1]
+        # Process each image and its annotation
+        for img_filename in tqdm(self.annotations.keys()):
+            # Load the image
+            img_path = os.path.join(self.img_dir, img_filename)
+
+            # Skip files that don't exist
+            if not os.path.exists(img_path):
+                continue
+
+            # Load and resize the image using the preprocess method
+            resized_img = self.preprocess(img_path)
+
+            # Save the resized image with PNG extension
+            output_filename = f"{os.path.splitext(img_filename)[0]}.png"
+            output_path = os.path.join(copy_images_dir, output_filename)
+
+            # Convert RGB to BGR for OpenCV save
+            resized_img_bgr = cv2.cvtColor(resized_img, cv2.COLOR_RGB2BGR)
+            cv2.imwrite(output_path, resized_img_bgr)
+
+            # Store the annotations as JSON files
+            annotation_filename = f"{os.path.splitext(img_filename)[0]}.json"
+            boxes, classes = self.annotations[img_filename][0], self.annotations[img_filename][1]
             annotation_data = {"boxes": boxes, "classes": classes}
             annotation_path = os.path.join(copy_annotations_dir, annotation_filename)
             with open(annotation_path, "w") as f:
                 json.dump(annotation_data, f)
 
-        print(f"Folder copied from '{self.img_dir}' to '{copy_images_dir}' successfully.")
+        print(f"Images processed and saved to '{copy_images_dir}' successfully.")
         return self
 
 
@@ -704,7 +719,7 @@ if __name__ == "__main__":
     img_dir = root_dir + "masati-thesis/images"
     obj_dir = root_dir + "MasatiV2/MasatiV2Boats"
     xml_dir = root_dir + "masati-thesis/annotations"
-    output_dir = root_dir + "masati-thesis/"
+    output_dir = root_dir + "masati-thesis/synthetic_images"
 
     # Create a ObjectInsertion instance
     inserter = ObjectInsertion(
@@ -713,12 +728,13 @@ if __name__ == "__main__":
         xml_dir=xml_dir,
         out_dir=output_dir,
         input_size=(512,512),
-        target_size=(512, 512),
+        target_size=(480, 480),
         margin=10,
         max_iter=100,
-        max_insert=3,
+        max_insert=2,
         sample_method="selective",
-        replacement=True
+        replacement=True,
+        seed=1583891
     )
     saves, fails, scores = inserter.object_insertion()
     print(f"Saves: {saves}, Fails: {fails}, Scores: {scores}")
