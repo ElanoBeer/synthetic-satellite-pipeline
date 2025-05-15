@@ -57,7 +57,7 @@ class DatasetCreator:
             str(self.original_dir): root_dir / f"0_original_annotation",
             str(self.insertion_dir): root_dir / f"1_object_annotation",
             str(self.augmentation_dir): root_dir / f"2_augmentation_annotation",
-            str(self.cloud_dir): root_dir / f"3_cloud_annotation",
+            str(self.cloud_dir): root_dir / f"3_cloud_annotation_copy",
             str(self.vae_dir): root_dir / f"4_vae_annotation"
         }
 
@@ -514,10 +514,10 @@ def main():
     # datasets = creator.create_all_datasets(total_images=1000)
 
     # Or create individual datasets with custom parameters
-    # creator.create_dataset_1(total_images=1000)
-    # creator.create_dataset_2(total_images=800)
-    creator.create_dataset_3(ratio=0.5, total_images=10000)
-    # creator.create_dataset_4(vae_percentage=0.3, orig_ratio=0.6, total_images=1200)
+    creator.create_dataset_1(total_images=4000)
+    creator.create_dataset_2(total_images=6000)
+    creator.create_dataset_3(ratio=0.25, total_images=8000)
+    creator.create_dataset_4(vae_percentage=0.4, orig_ratio=0.2, total_images=10000)
 
 
 if __name__ == "__main__":

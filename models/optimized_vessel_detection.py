@@ -10,6 +10,8 @@ from tqdm import tqdm
 import random
 from PIL import Image
 import yaml
+import gc
+import torch
 
 
 class VesselDetection:
@@ -18,10 +20,10 @@ class VesselDetection:
                  annotations_dir,
                  model_dir,
                  output_dir='vessel_detection',
-                 img_size=(640,640),
+                 img_size=(640, 640),
                  n_folds=5,
                  epochs=50,
-                 batch_size=16):
+                 batch_size=8):  # Reduced from 16 to 8
         """
         Initialize vessel detection pipeline with YOLOv8
 
@@ -52,6 +54,15 @@ class VesselDetection:
 
         # Class names (assuming vessel is the only class)
         self.classes = ['vessel']
+        
+        # Memory management
+        self.enable_amp = True  # Enable Automatic Mixed Precision
+
+    def clear_memory(self):
+        """Clear GPU cache and call garbage collector"""
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        gc.collect()
 
     def load_annotations(self):
         """Load and parse individual JSON annotation files"""
@@ -65,34 +76,39 @@ class VesselDetection:
         json_files = [f for f in os.listdir(annotation_dir) if f.endswith('.json')]
         print(f"Found {len(json_files)} annotation files")
 
-        # Process each annotation file
-        for json_file in tqdm(json_files):
-            # Extract corresponding image filename (assuming same basename)
-            base_name = os.path.splitext(json_file)[0]
-            possible_extensions = ['.jpg', '.jpeg', '.png', '.tif', '.tiff']
+        # Process each annotation file in batches to reduce memory usage
+        batch_size = 100
+        for i in range(0, len(json_files), batch_size):
+            batch_files = json_files[i:i+batch_size]
+            
+            # Process each file in the batch
+            for json_file in tqdm(batch_files):
+                # Extract corresponding image filename (assuming same basename)
+                base_name = os.path.splitext(json_file)[0]
+                possible_extensions = ['.jpg', '.jpeg', '.png', '.tif', '.tiff']
 
-            # Find matching image file
-            img_file = None
-            for ext in possible_extensions:
-                potential_img = base_name + ext
-                if os.path.exists(os.path.join(self.images_dir, potential_img)):
-                    img_file = potential_img
-                    break
+                # Find matching image file
+                img_file = None
+                for ext in possible_extensions:
+                    potential_img = base_name + ext
+                    if os.path.exists(os.path.join(self.images_dir, potential_img)):
+                        img_file = potential_img
+                        break
 
-            if img_file is None:
-                print(f"Warning: No matching image found for annotation {json_file}")
-                continue
+                if img_file is None:
+                    print(f"Warning: No matching image found for annotation {json_file}")
+                    continue
 
-            # Load the JSON annotation
-            with open(os.path.join(annotation_dir, json_file), 'r') as f:
-                try:
-                    annotation_data = json.load(f)
+                # Load the JSON annotation
+                with open(os.path.join(annotation_dir, json_file), 'r') as f:
+                    try:
+                        annotation_data = json.load(f)
 
-                    # Store the annotation with image filename as key
-                    self.annotations[img_file] = annotation_data
-                    self.image_list.append(img_file)
-                except json.JSONDecodeError:
-                    print(f"Error: Could not parse JSON file {json_file}")
+                        # Store the annotation with image filename as key
+                        self.annotations[img_file] = annotation_data
+                        self.image_list.append(img_file)
+                    except json.JSONDecodeError:
+                        print(f"Error: Could not parse JSON file {json_file}")
 
         self.annotation_format = 'per_file'  # Mark that we're using the per-file format
         print(f"Successfully loaded annotations for {len(self.image_list)} images")
@@ -109,32 +125,40 @@ class VesselDetection:
         images_output_dir = os.path.join(self.data_dir, 'images')
         os.makedirs(images_output_dir, exist_ok=True)
 
-        # Process each image
-        for img_name in tqdm(self.image_list):
-            # Copy image to dataset directory
-            img_src = os.path.join(self.images_dir, img_name)
-            img_dst = os.path.join(images_output_dir, img_name)
+        # Process images in batches to reduce memory usage
+        batch_size = 50
+        for i in range(0, len(self.image_list), batch_size):
+            batch_images = self.image_list[i:i+batch_size]
+            
+            # Process each image in the batch
+            for img_name in tqdm(batch_images):
+                # Copy image to dataset directory
+                img_src = os.path.join(self.images_dir, img_name)
+                img_dst = os.path.join(images_output_dir, img_name)
 
-            if os.path.exists(img_src):
-                shutil.copy(img_src, img_dst)
+                if os.path.exists(img_src):
+                    shutil.copy(img_src, img_dst)
 
-                # Open image
-                img = Image.open(img_src)
-                img_width, img_height = img.size
+                    # Open image to get dimensions only
+                    with Image.open(img_src) as img:
+                        img_width, img_height = img.size
 
-                # Create label file (txt format for YOLO)
-                label_filename = os.path.splitext(img_name)[0] + '.txt'
-                label_path = os.path.join(labels_dir, label_filename)
+                    # Create label file (txt format for YOLO)
+                    label_filename = os.path.splitext(img_name)[0] + '.txt'
+                    label_path = os.path.join(labels_dir, label_filename)
 
-                # Extract annotations for this image
-                bboxes = self._extract_bboxes(img_name, img_width, img_height)
+                    # Extract annotations for this image
+                    bboxes = self._extract_bboxes(img_name, img_width, img_height)
 
-                # Write YOLO format labels
-                with open(label_path, 'w') as f:
-                    for cls_id, x_center, y_center, width, height in bboxes:
-                        f.write(f"{cls_id} {x_center} {y_center} {width} {height}\n")
-            else:
-                print(f"Warning: Image {img_name} not found in {self.images_dir}")
+                    # Write YOLO format labels
+                    with open(label_path, 'w') as f:
+                        for cls_id, x_center, y_center, width, height in bboxes:
+                            f.write(f"{cls_id} {x_center} {y_center} {width} {height}\n")
+                else:
+                    print(f"Warning: Image {img_name} not found in {self.images_dir}")
+            
+            # Clear memory after each batch
+            self.clear_memory()
 
         return images_output_dir, labels_dir
 
@@ -149,40 +173,20 @@ class VesselDetection:
 
                 if bbox_list:
                     for bbox_data in bbox_list:
-                        # Extract coordinates based on available format
+                        # Extract coordinates (simplified for memory efficiency)
                         if isinstance(bbox_data, list) and len(bbox_data) >= 4:
-                            # If it's a simple list of coordinates
-                            x, y, w, h = bbox_data[:4]
-                        # elif isinstance(bbox_data, dict):
-                        #     if 'bbox' in bbox_data:
-                        #         x, y, w, h = bbox_data['bbox']
-                        #     elif all(k in bbox_data for k in ['x', 'y', 'width', 'height']):
-                        #         x, y, w, h = bbox_data['x'], bbox_data['y'], bbox_data['width'], bbox_data[
-                        #             'height']
-                        #     else:
-                        #         # Try other common formats
-                        #         if all(k in bbox_data for k in ['xmin', 'ymin', 'xmax', 'ymax']):
-                        #             xmin, ymin, xmax, ymax = bbox_data['xmin'], bbox_data['ymin'], bbox_data[
-                        #                 'xmax'], bbox_data['ymax']
-                        #             x, y = xmin, ymin
-                        #             w, h = xmax - xmin, ymax - ymin
-                        #         else:
-                        #             print(f"Warning: Unrecognized bbox format in {img_name}")
-                        #             continue
+                            xmin, ymin, xmax, ymax = bbox_data
+
+                            # Compute YOLO format values
+                            x_center = ((xmin + xmax) / 2) / img_width
+                            y_center = ((ymin + ymax) / 2) / img_height
+                            width = (xmax - xmin) / img_width
+                            height = (ymax - ymin) / img_height
+
+                            cls_id = 0  # Assuming 'vessel' is the only class
+                            bboxes.append((cls_id, x_center, y_center, width, height))
                         else:
                             print(f"Warning: Could not parse bbox data in {img_name}")
-                            continue
-
-                        xmin, ymin, xmax, ymax = bbox_data
-
-                        # Compute YOLO format values
-                        x_center = ((xmin + xmax) / 2) / img_width
-                        y_center = ((ymin + ymax) / 2) / img_height
-                        width = (xmax - xmin) / img_width
-                        height = (ymax - ymin) / img_height
-
-                        cls_id = 0  # Assuming 'vessel' is the only class
-                        bboxes.append((cls_id, x_center, y_center, width, height))
 
         return bboxes
 
@@ -219,7 +223,7 @@ class VesselDetection:
         """Perform k-fold cross-validation for YOLOv8 training"""
         print(f"Starting {self.n_folds}-fold cross-validation...")
 
-        # Get all image files
+        # Get all image files (filenames only, not loading into memory)
         image_files = [f for f in os.listdir(images_dir) if f.endswith(('.jpg', '.jpeg', '.png'))]
 
         # Setup k-fold cross validation
@@ -247,21 +251,29 @@ class VesselDetection:
             model_dir = os.path.join(self.results_dir, f'fold_{fold}')
             os.makedirs(model_dir, exist_ok=True)
 
-            # Initialize and train YOLOv8 model
-            model = YOLO(self.model_dir)  # You can change to m, l, x for larger models
+            # Initialize YOLOv8 model
+            model = YOLO(self.model_dir)
 
-            results = model.train(
-                data=data_yaml,
-                epochs=self.epochs,
-                batch=self.batch_size,
-                imgsz=self.img_size,
-                project=self.results_dir,
-                name=f'fold_{fold}',
-                exist_ok=True
-            )
+            # Configure training args with memory optimizations
+            train_args = {
+                'data': data_yaml,
+                'epochs': self.epochs,
+                'batch': self.batch_size,
+                'imgsz': self.img_size,
+                'project': self.results_dir,
+                'name': f'fold_{fold}',
+                'exist_ok': True,
+                'cache': False,  # Disable cache to reduce memory usage
+                'device': 0 if torch.cuda.is_available() else 'cpu',
+                'workers': 2,  # Reduce number of workers
+                'amp': self.enable_amp,  # Enable mixed precision training
+            }
+
+            # Train the model
+            results = model.train(**train_args)
 
             # Validate the model
-            val_results = model.val(data=data_yaml)
+            val_results = model.val(data=data_yaml, batch=4)  # Use smaller batch size for validation
 
             # Store results
             metrics = {
@@ -275,6 +287,10 @@ class VesselDetection:
 
             print(
                 f"Fold {fold + 1} results: mAP@0.5 = {metrics['map50']:.4f}, mAP@0.5:0.95 = {metrics['map50-95']:.4f}")
+            
+            # Clear memory between folds
+            del model
+            self.clear_memory()
 
         return all_results
 
@@ -306,8 +322,8 @@ class VesselDetection:
 
         for i, metric in enumerate(metrics):
             plt.subplot(2, 2, i + 1)
-            values = [r[metric] for r in results]
-            folds = [r['fold'] + 1 for r in results]
+            values = [float(r[metric]) for r in results]
+            folds = [int(r['fold']) + 1 for r in results]
 
             plt.bar(folds, values)
             plt.axhline(np.mean(values), color='red', linestyle='--', label=f'Mean: {np.mean(values):.4f}')
@@ -322,14 +338,17 @@ class VesselDetection:
 
     def run_pipeline(self):
         """Run the complete vessel detection pipeline"""
-        # Load annotations
+        # Load annotations (with memory optimization)
         self.load_annotations()
+        self.clear_memory()
 
-        # Prepare dataset in YOLO format
+        # Prepare dataset in YOLO format (with memory optimization)
         images_dir, labels_dir = self.prepare_yolo_dataset()
+        self.clear_memory()
 
         # Perform cross-validation
         results = self.perform_cross_validation(images_dir, labels_dir)
+        self.clear_memory()
 
         # Summarize results
         summary = self.summarize_results(results)
@@ -341,10 +360,17 @@ class VesselDetection:
                 'summary': {k: {'mean': float(v[0]), 'std': float(v[1])} for k, v in summary.items()}
             }, f, indent=4)
 
-        # Train final model using all data (optional)
+        # Train final model using all data (optional, with memory optimizations)
         print("\nTraining final model on all data...")
-        all_images = [os.path.join(images_dir, f) for f in os.listdir(images_dir)
-                      if f.endswith(('.jpg', '.jpeg', '.png'))]
+        
+        # Get image paths in batches
+        all_images = []
+        batch_size = 200
+        image_files = [f for f in os.listdir(images_dir) if f.endswith(('.jpg', '.jpeg', '.png'))]
+        
+        for i in range(0, len(image_files), batch_size):
+            batch_files = image_files[i:i+batch_size]
+            all_images.extend([os.path.join(images_dir, f) for f in batch_files])
 
         # Split into train and val (small validation set just for metrics)
         random.shuffle(all_images)
@@ -355,8 +381,9 @@ class VesselDetection:
         # Create dataset YAML
         final_yaml = self.create_dataset_yaml(final_train, final_val, 'final')
 
-        # Train final model
+        # Train final model with memory optimizations
         final_model = YOLO(self.model_dir)
+        
         final_model.train(
             data=final_yaml,
             epochs=self.epochs,
@@ -364,30 +391,27 @@ class VesselDetection:
             imgsz=self.img_size,
             project=self.results_dir,
             name='final_model',
-            exist_ok=True
+            exist_ok=True,
+            cache=False,
+            device=0 if torch.cuda.is_available() else 'cpu',
+            workers=2,
+            amp=self.enable_amp
         )
 
         # Validate final model
-        final_results = final_model.val(data=final_yaml)
+        final_results = final_model.val(data=final_yaml, batch=4)  # Smaller batch size for validation
 
         print("\n===== Final Model Results =====")
         print(f"mAP@0.5: {final_results.box.map50:.4f}")
         print(f"mAP@0.5:0.95: {final_results.box.map:.4f}")
 
         print("\nVessel detection pipeline complete!")
+        self.clear_memory()
         return final_model
 
     def visualize_predictions(self, num_samples=5):
         """Visualize model predictions on sample images"""
         print("Visualizing model predictions...")
-
-        # # Use final model or specified model
-        # if model_path is None:
-        #     model_path = os.path.join(self.results_dir, 'final_model', 'weights', 'best.pt')
-        #
-        # if not os.path.exists(model_path):
-        #     print(f"Model not found at {model_path}")
-        #     return
 
         # Load the model
         model = YOLO(self.model_dir)
@@ -410,8 +434,9 @@ class VesselDetection:
         for img_file in sample_images:
             img_path = os.path.join(images_dir, img_file)
 
-            # Run prediction
-            results = model(img_path)
+            # Run prediction with memory optimization
+            with torch.no_grad():  # Disable gradient tracking
+                results = model(img_path)
 
             # Save visualization
             vis_path = os.path.join(vis_dir, f"pred_{img_file}")
@@ -421,29 +446,32 @@ class VesselDetection:
 
             # Save the visualization
             cv2.imwrite(vis_path, result_img)
+            
+            # Clear memory after each prediction
+            self.clear_memory()
 
         print(f"Saved {num_samples} visualization images to {vis_dir}")
 
 
 if __name__ == "__main__":
     # Parameters
-    IMAGES_DIR = r"E:\Datasets\masati-thesis\synthetic_images\5_output_datasets\dataset1"  # Update with your image directory
-    ANNOTATIONS_DIR = r"E:\Datasets\masati-thesis\synthetic_images\5_output_datasets\annotation1"  # Update with your annotations file
-    OUTPUT_DIR = "E:/Datasets/masati-thesis/results/vessel_detection_output_0"
+    IMAGES_DIR = r"E:\Datasets\masati-thesis\synthetic_images\5_output_datasets\dataset4"  # Update with your image directory
+    ANNOTATIONS_DIR = r"E:\Datasets\masati-thesis\synthetic_images\5_output_datasets\annotation4"  # Update with your annotations file
+    OUTPUT_DIR = "E:/Datasets/masati-thesis/results/vessel_detection_output_4"
     MODEL_DIR = "yolov8n.pt"
     N_FOLDS = 5  # Number of cross-validation folds
     EPOCHS = 20  # Training epochs per fold
 
-    # Initialize and run pipeline
+    # Initialize and run pipeline with memory optimizations
     detector = VesselDetection(
         images_dir=IMAGES_DIR,
         annotations_dir=ANNOTATIONS_DIR,
         output_dir=OUTPUT_DIR,
         model_dir=MODEL_DIR,
-        img_size=480,
+        img_size=480,  # Reduced image size (from default 640)
         n_folds=N_FOLDS,
         epochs=EPOCHS,
-        batch_size=16
+        batch_size=8  # Reduced from 16
     )
 
     final_model = detector.run_pipeline()
