@@ -289,7 +289,7 @@ class DatasetCreator:
             self.set_seed(self.seed)
 
         # Create dataset directory
-        dataset_dir = self.output_base_dir / "dataset4"
+        dataset_dir = self.output_base_dir / "dataset"
         dataset_dir.mkdir(parents=True, exist_ok=True)
 
         orig_files = self.get_original_files()
@@ -514,9 +514,9 @@ def main():
     # datasets = creator.create_all_datasets(total_images=1000)
 
     # Or create individual datasets with custom parameters
-    creator.create_dataset_1(total_images=4000)
-    creator.create_dataset_2(total_images=6000)
-    creator.create_dataset_3(ratio=0.25, total_images=8000)
+    # creator.create_dataset_1(total_images=4000)
+    # creator.create_dataset_2(total_images=6000)
+    # creator.create_dataset_3(ratio=0.25, total_images=8000)
     creator.create_dataset_4(vae_percentage=0.4, orig_ratio=0.2, total_images=10000)
 
 

@@ -1841,8 +1841,6 @@ dependencies = [
     { name = "satellite-cloud-generator" },
     { name = "scikit-image" },
     { name = "seaborn" },
-    { name = "torch" },
-    { name = "torchvision" },
     { name = "tqdm" },
 ]
 
@@ -1858,8 +1856,6 @@ requires-dist = [
     { name = "satellite-cloud-generator", specifier = ">=0.4" },
     { name = "scikit-image", specifier = ">=0.25.2" },
     { name = "seaborn", specifier = ">=0.13.2" },
-    { name = "torch", specifier = ">=2.6.0" },
-    { name = "torchvision", specifier = ">=0.21.0" },
     { name = "tqdm", specifier = ">=4.67.1" },
 ]
 

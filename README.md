@@ -1,51 +1,152 @@
-# Synthetic Optical Satellite Imagery Generation Pipeline  
+# Synthetic Optical Satellite Imagery Generation Pipeline
+## 📌 Overview
+This repository contains the implementation of a **synthetic data generation pipeline for optical satellite imagery**, developed as part of a research project focused on maritime surveillance. The pipeline leverages various generative models to create realistic satellite imagery, with a specific focus on maritime vessel detection and anomaly identification.
+## 🎯 Objectives
+- Create a versatile **synthetic data generation framework** for maritime satellite imagery
+- Implement and evaluate multiple generative approaches including **GANs, VAEs, and object insertion techniques**
+- Generate diverse training data to improve **vessel detection performance** across varying conditions
+- Simulate realistic maritime scenarios including **vessel anomalies** and challenging weather conditions
 
-## 📌 Overview  
-This repository contains the implementation of a **synthetic data generation pipeline for optical satellite imagery**, developed as part of my master's thesis. The project explores **generative models** for creating high-fidelity satellite images, aiming to enhance AI-driven maritime surveillance. The goal is to provide **diverse, high-quality training data** to improve deep learning models for vessel detection.
-## 🎯 Objectives  
-- Develop a **synthetic data generation framework** tailored for maritime satellite imagery.  
-- Utilize **Generative Adversarial Networks (GANs) and diffusion models** to create realistic images.  
-- Improve **deep learning model robustness** to variations in weather, lighting, and vessel types.  
-- Bridge the **data gap in maritime surveillance** by generating high-fidelity, annotated training datasets.  
+## 🏗️ Pipeline Components
+### 1️⃣ **Data Processing & Preparation**
+- **Image preprocessing**: Normalization, patching, and augmentation
+- **Object extraction**: Vessel segmentation from source imagery
+- **Dataset management**: Tools for organizing real and synthetic datasets (MASATI-v2, S2Ships)
 
-## 🏗️ Pipeline Components  
-The **synthetic imagery generation pipeline** consists of the following key components:  
+### 2️⃣ **Synthetic Generation Methods**
+- **Generative models**:
+    - VAE implementation for satellite imagery reconstruction
+    - Wasserstein GAN with gradient penalty for satellite image generation
+    - Context Encoder with PatchGAN for generative inpainting
 
-### 1️⃣ **Data Collection & Preprocessing**  
-- Sources: Real-world **optical and SAR satellite imagery**.  
-- Preprocessing: Image **normalization, augmentation, and segmentation**.  
-- Object extraction: **Ship segmentation models (e.g., YOLACT, Mask R-CNN)** for dataset preparation.  
+- **Image Augmentation**:
+  - Fast and effective dataset augmentation using Albumentations
 
-### 2️⃣ **Synthetic Image Generation**  
-- **GAN-based approach**: U-Net GANs, StyleGAN, and CycleGAN.  
-- **Diffusion models**: Alternative generative approach for high-resolution realism.  
-- **Object insertion techniques**: Context-aware ship placement (guided by object detection strategies).  
+- **Object insertion techniques**:
+    - Context-aware vessel placement
+    - Seamless cloning for realistic integration
 
-### 3️⃣ **Evaluation & Validation**  
-- **Fidelity metrics**: Fréchet Inception Distance (FID), Structural Similarity Index (SSIM).  
-- **Realism assessment**: Human expert evaluation and histogram comparison (HOG).  
-- **Model performance**: Training deep learning-based vessel detection models with synthetic data.  
+- **Environmental simulation**:
+    - Cloud generation and weather effects
+    - Maritime condition variations
 
-### 4️⃣ **Maritime Anomaly Simulation**  
-- **Dark fleet behavior modeling**: Simulating untracked vessel movement.  
-- **Adverse weather simulation**: Generating images with occlusion factors (clouds, fog, reflections).  
+### 3️⃣ **Vessel Detection & Evaluation**
+- **YOLOv8 implementation**: Optimized for maritime vessel detection
+- **Cross-validation frameworks**: Comprehensive testing across datasets
+- **Performance metrics**: Precision, recall, and specialized maritime detection metrics
 
----
+## 📂 Repository Structure
+``` 
+📦 synthetic-satellite-pipeline
+ ┣ 📂 data                      # Dataset storage (not tracked in git)
+ ┣ 📂 evaluation                # Directory for evaluation scripts
+ ┃ ┣ 📜 cloud_mask_generator.py # Generate cloud masks
+ ┃ ┣ 📜 eval_cloud_obstruction.py # Evaluate simulated cloud obstruction
+ ┃ ┣ 📜 vessel_count_eval.py    # Evaluation of object insertion counts
+ ┣ 📂 images                    # Generated imagery and evaluation thesis results
+ ┣ 📂 models                    # Model implementations
+ ┃ ┣ 📂 yolov8-n                # YOLOv8 vessel detection implementation
+ ┃ ┣ 📂 context_encoder         # Context Encoder models
+ ┃ ┣ 📂 wgan_gp                 # Wasserstein GAN with Gradient Penalty models
+ ┃ ┗ 📂 vae                     # Variational Autoencoder models
+ ┣ 📂 notebooks                 # Jupyter notebooks for experiments and visualizations
+ ┃ ┣ 📜 cv_evaluations.ipynb    # Main CV Results and visualizations
+ ┃ ┣ 📜 eurosat_gan.ipynb       # GAN training on EuroSAT data
+ ┃ ┣ 📜 image_augmentation_utils.ipynb # Testing utilities for image augmentation
+ ┃ ┣ 📜 masativ2_testing.ipynb  # Exploratory data analysis and testing with Masati-v2
+ ┃ ┣ 📜 object_exploration.ipynb # Vessel object analysis
+ ┃ ┣ 📜 s2ships_testing.ipynb   # Exploratory data analysis and testing with S2Ships
+ ┃ ┣ 📜 seamless_cloning.ipynb  # Object insertion experiments
+ ┃ ┣ 📜 test_cloud_generator.ipynb # Cloud simulation testing
+ ┃ ┣ 📜 test_pipeline_components.ipynb # Component testing
+ ┃ ┗ 📜 vae_testing.ipynb       # Extensive testing of VAE's generative capabilities
+ ┣ 📂 src                       # Core implementation
+ ┃ ┣ 📜 basic_augmentation.py   # Data augmentation techniques
+ ┃ ┣ 📜 cloud_generator.py      # Cloud and weather simulation
+ ┃ ┣ 📜 detection_attempt.py    # Prior object detection attempt with other models
+ ┃ ┣ 📜 object_insertion.py     # Vessel placement algorithms
+ ┃ ┣ 📜 pipeline.py             # Run pre-generation pipeline
+ ┃ ┗ 📜 synthetic_generation.py # Main pipeline orchestration
+ ┣ 📂 utils                     # Utility scripts
+ ┃ ┣ 📜 annotation_converter.py # Converting annotation formats
+ ┃ ┣ 📜 boat_extraction.py      # Vessel extraction utilities
+ ┃ ┣ 📜 dataset_creator.py      # Create dataset configurations
+ ┃ ┣ 📜 image_patching.py       # Script to patch large satellite imagery
+ ┗ 📜 .gitignore                # Intentionally untracked files
+ ┗ 📜 .python-version           # Specified Python version for pyenv
+ ┗ 📜 pyproject.toml            # Dependencies and configurations for project
+ ┗ 📜 README.md                 # Project documentation
+ ┗ 📜 uv.lock                   # Dependency lock file generated by uv
+```
+## 🔧 Key Features
+### Vessel Extraction & Insertion
+The pipeline implements sophisticated object extraction and insertion techniques to create realistic vessel placements in maritime scenes:
+- Contextual vessel positioning based on water/land segmentation
+- Seamless blending with background maritime environments
+- Scale and orientation adjustments for realism
 
-## 📂 Repository Structure  
-This repository is organized as follows:  
+### Synthetic Environment Generation
+Environmental variations are simulated to enhance dataset diversity:
+- Cloud and atmospheric condition generation
+- Maritime surface variations (waves, reflections)
+- Time-of-day and seasonal variations
 
-```plaintext
-📦 synthetic-satellite-imagery-pipeline  
- ┣ 📂 data               # Raw and processed dataset (real & synthetic images)  
- ┣ 📂 models             # Pre-trained and custom deep learning models  
- ┣ 📂 notebooks          # Jupyter notebooks for training & evaluation  
- ┣ 📂 src                # Core pipeline implementation (GANs, diffusion models, object insertion)  
- ┃ ┣ 📜 data_loader.py   # Scripts for loading and preprocessing satellite images  
- ┃ ┣ 📜 train_gan.py     # Training script for generative models  
- ┃ ┣ 📜 evaluate.py      # Metrics evaluation (FID, SSIM, etc.)  
- ┣ 📂 results            # Generated synthetic images & validation results  
- ┣ 📂 docs               # Project documentation & methodology details  
- ┣ 📜 requirements.txt   # Dependencies & environment setup  
- ┣ 📜 README.md          # Project overview  
- ┗ 📜 LICENSE            # License information  
+### YOLOv8 Vessel Detection
+An optimized YOLOv8 implementation provides state-of-the-art vessel detection:
+- Fine-tuned for maritime vessel detection scenarios
+- Comprehensive evaluation across synthetic and real datasets
+- Performance analysis with various training data combinations
+
+## 🚀 Getting Started
+### Requirements
+The project requires Python 3.8+ and the following key dependencies:
+- PyTorch
+- OpenCV
+- NumPy
+- Matplotlib
+- Ultralytics YOLOv8
+
+### Usage Examples
+#### Generating Synthetic Images
+``` python
+from src.synthetic_generation import SyntheticGenerator
+
+generator = SyntheticGenerator(background_dir='data/backgrounds',
+                               vessel_dir='data/vessels')
+synthetic_images = generator.generate_batch(num_images=100)
+```
+#### Running Vessel Detection
+``` python
+from models.yolov8
+
+-n.optimized_vessel_detection
+import VesselDetector
+
+detector = VesselDetector(model_path='models/yolov8-n/best.pt')
+results = detector.detect('path/to/image.jpg')
+```
+## 📊 Results
+The pipeline has demonstrated significant improvements in vessel detection performance, particularly in challenging scenarios with:
+- Varied vessel types and sizes
+- Adverse weather conditions
+- Complex backgrounds and coastal regions
+
+For detailed performance metrics and visualizations, see the evaluation notebooks in the repository.
+## 🔍 Future Work
+Ongoing development is focused on:
+- Expanding the diversity of synthetic vessel types
+- Implementing more sophisticated diffusion models
+- Enhancing anomaly detection capabilities
+- Improving computational efficiency for large-scale dataset generation
+
+## 📝 Citation
+If you use this code in your research, please cite:
+``` 
+@misc{synthetic-satellite-pipeline,
+  author = {Beer, E.H.U.},
+  title = {Synthetic Optical Satellite Imagery Generation Pipeline},
+  year = {2025},
+  publisher = {GitHub},
+  url = {https://github.com/username/synthetic-satellite-pipeline}
+}
+```

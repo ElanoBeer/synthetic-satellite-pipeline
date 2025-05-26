@@ -15,7 +15,5 @@ dependencies = [
     "satellite-cloud-generator>=0.4",
     "scikit-image>=0.25.2",
     "seaborn>=0.13.2",
-    "torch>=2.6.0",
-    "torchvision>=0.21.0",
     "tqdm>=4.67.1",
 ]
