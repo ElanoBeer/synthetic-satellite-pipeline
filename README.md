@@ -143,10 +143,10 @@ Ongoing development is focused on:
 If you use this code in your research, please cite:
 ``` 
 @misc{synthetic-satellite-pipeline,
-  author = {Beer, E.H.U.},
+  author = {Beer, Elano},
   title = {Synthetic Optical Satellite Imagery Generation Pipeline},
   year = {2025},
   publisher = {GitHub},
-  url = {https://github.com/username/synthetic-satellite-pipeline}
+  url = {https://github.com/ElanoBeer/synthetic-satellite-pipeline}
 }
 ```
