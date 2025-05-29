@@ -99,12 +99,30 @@ An optimized YOLOv8 implementation provides state-of-the-art vessel detection:
 
 ## 🚀 Getting Started
 ### Requirements
-The project requires Python 3.8+ and the following key dependencies:
+The project requires Python 3.11 and the following key dependencies:
 - PyTorch
 - OpenCV
 - NumPy
 - Matplotlib
 - Ultralytics YOLOv8
+
+Although the project was created using a virtual environment, the dependencies have been exported to requirements.txt and poetry files.
+
+## ❗ Running Image Generation Models
+Important: The Pytorch implementation were performed using a separate environment, which utilizes CUDA. It is inspired by the following GitHub repository: https://github.com/eriklindernoren/PyTorch-GAN
+Nevertheless, its dependencies can not be integrated with packages used within this project and thus should be performed in a new environment as well.
+The integration within this repo is solely to have all utilized scripts in one place. More information on these dependencies:
+
+- torch: 2.6.0+cu126
+- torchaudio: 2.6.0+cu126
+- torchvision: 2.6.0+cu126
+- CUDA: 12.6
+
+### Machine Specifications
+The experiments in this thesis were performed in the following machine. However, with the resource allocation being maximized, an improved machine configurations would be preferred.
+- GPU: Nvidia RTX 2070 8GB VRAM
+- CPU: AMG Ryzen 7 2700X 8-core processor
+- RAM: 16 GB
 
 ### Usage Examples
 #### Generating Synthetic Images
