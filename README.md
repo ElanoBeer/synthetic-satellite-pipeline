@@ -127,16 +127,17 @@ results = detector.detect('path/to/image.jpg')
 ```
 ## 📊 Results
 The pipeline has demonstrated significant improvements in vessel detection performance, particularly in challenging scenarios with:
-- Varied vessel types and sizes
-- Adverse weather conditions
-- Complex backgrounds and coastal regions
+- Adverse weather conditions including cloud coverage
+- Complex backgrounds with boat clusters
+- Robust performance under varying lighting conditions
 
 For detailed performance metrics and visualizations, see the evaluation notebooks in the repository.
+
 ## 🔍 Future Work
 Ongoing development is focused on:
 - Expanding the diversity of synthetic vessel types
 - Implementing more sophisticated diffusion models
-- Enhancing anomaly detection capabilities
+- Integrating API and geospatial input data
 - Improving computational efficiency for large-scale dataset generation
 
 ## 📝 Citation
